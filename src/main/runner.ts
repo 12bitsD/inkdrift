@@ -10,6 +10,7 @@ import { workerResponseSchema } from '../shared/worker'
 import type { Store } from './store'
 
 const EMPTY_USAGE: TokenUsage = { inputTokens: null, outputTokens: null }
+type ActiveRun = { child: ChildProcessWithoutNullStreams | null; cancelled: boolean }
 type RunOutcome = Pick<RunRecord, 'status' | 'errorCode' | 'errorMessage' | 'rawResponse' | 'svg' | 'finishReason' | 'usage' | 'hasSvg'>
 
 function workerCommand(): { command: string; args: string[]; pythonPath?: string } {
@@ -22,7 +23,7 @@ function workerCommand(): { command: string; args: string[]; pythonPath?: string
 }
 
 export class Runner {
-  private active: { child: ChildProcessWithoutNullStreams; cancelled: boolean } | null = null
+  private active: ActiveRun | null = null
 
   get isRunning(): boolean {
     return this.active !== null
@@ -30,23 +31,26 @@ export class Runner {
 
   async generate(store: Store, profileId: string, prompt: string): Promise<RunRecord> {
     if (this.active) throw new Error('A generation is already running')
-    const { profile, apiKey } = await store.credentials(profileId)
-    const runId = randomUUID()
+    const active: ActiveRun = { child: null, cancelled: false }
+    this.active = active
     const startedAt = Date.now()
-    const base = store.metadata({
-      id: runId,
-      profileId: profile.id,
-      profileName: profile.name,
-      modelId: profile.modelId,
-      prompt,
-      createdAt: new Date(startedAt).toISOString(),
-      durationMs: 0,
-      status: 'failed',
-      finishReason: null,
-      hasSvg: false,
-    })
     try {
-      const result = await this.execute(profile, apiKey, runId, prompt)
+      const { profile, apiKey } = await store.credentials(profileId)
+      const runId = randomUUID()
+      const base = store.metadata({
+        id: runId,
+        profileId: profile.id,
+        profileName: profile.name,
+        modelId: profile.modelId,
+        prompt,
+        createdAt: new Date(startedAt).toISOString(),
+        durationMs: 0,
+        status: 'failed',
+        finishReason: null,
+        hasSvg: false,
+      })
+      if (active.cancelled) return { ...base, ...this.failure('cancelled', 'Generation cancelled', 'cancelled'), durationMs: Date.now() - startedAt }
+      const result = await this.execute(profile, apiKey, runId, prompt, active)
       return { ...base, ...result, durationMs: Date.now() - startedAt }
     } finally {
       this.active = null
@@ -56,10 +60,10 @@ export class Runner {
   cancel(): void {
     if (!this.active) return
     this.active.cancelled = true
-    this.active.child.kill('SIGTERM')
+    this.active.child?.kill('SIGTERM')
   }
 
-  private async execute(profile: ModelProfile, apiKey: string, runId: string, prompt: string): Promise<RunOutcome> {
+  private async execute(profile: ModelProfile, apiKey: string, runId: string, prompt: string, active: ActiveRun): Promise<RunOutcome> {
     const { command, args, pythonPath } = workerCommand()
     if (!existsSync(command)) return this.failure('worker-error', 'The Nextloop worker is missing. Reinstall or rebuild the application.')
     const child = spawn(command, args, {
@@ -75,8 +79,7 @@ export class Runner {
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
     })
-    const active = { child, cancelled: false }
-    this.active = active
+    active.child = child
     const flags = { timedOut: false, oversized: false }
     const timer = setTimeout(() => {
       flags.timedOut = true

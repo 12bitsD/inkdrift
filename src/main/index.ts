@@ -52,6 +52,7 @@ function registerIpc(): void {
     return Promise.resolve()
   })
   handle('run:get', (_event, input) => store.getRun(runIdSchema.parse(input)))
+  handle('run:svg', (_event, input) => store.getRunSvg(runIdSchema.parse(input)))
   handle('run:copy', async (_event, input) => {
     const run = await store.getRun(runIdSchema.parse(input))
     await clipboard.writeText(run.rawResponse)

@@ -69,8 +69,13 @@ export class Store {
   private async writeJson(relativePath: string, value: unknown): Promise<void> {
     const destination = join(this.root, relativePath)
     const temporary = `${destination}.${randomUUID()}.tmp`
-    await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
-    await rename(temporary, destination)
+    try {
+      await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+      await rename(temporary, destination)
+    } catch (error) {
+      await unlink(temporary).catch(() => {})
+      throw error
+    }
   }
 
   private settings(): Promise<Settings> {
@@ -177,17 +182,26 @@ export class Store {
 
   async saveRun(record: RunRecord): Promise<void> {
     return this.mutate(async () => {
-      await writeFile(join(this.root, 'history', `${record.id}.txt`), record.rawResponse, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
-      if (record.svg !== null) {
-        await writeFile(join(this.root, 'history', `${record.id}.svg`), record.svg, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+      const written: string[] = []
+      try {
+        await writeFile(join(this.root, 'history', `${record.id}.txt`), record.rawResponse, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+        written.push('txt')
+        if (record.svg !== null) {
+          await writeFile(join(this.root, 'history', `${record.id}.svg`), record.svg, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+          written.push('svg')
+        }
+        const metadata: Partial<RunRecord> = { ...record }
+        delete metadata.rawResponse
+        delete metadata.svg
+        await this.writeJson(`history/${record.id}.json`, metadata)
+        written.push('json')
+        const index = await this.readJson('history/index.json', runIndexSchema, { version: 1, runs: [] })
+        const runs = [metadata, ...index.runs.filter(run => run.id !== record.id)]
+        await this.writeJson('history/index.json', { version: 1, runs })
+      } catch (error) {
+        await Promise.all(written.map(extension => this.removeRunFile(record.id, extension).catch(() => {})))
+        throw error
       }
-      const metadata: Partial<RunRecord> = { ...record }
-      delete metadata.rawResponse
-      delete metadata.svg
-      await this.writeJson(`history/${record.id}.json`, metadata)
-      const index = await this.readJson('history/index.json', runIndexSchema, { version: 1, runs: [] })
-      const runs = [metadata, ...index.runs.filter(run => run.id !== record.id)]
-      await this.writeJson('history/index.json', { version: 1, runs })
     })
   }
 
@@ -196,10 +210,10 @@ export class Store {
       const metadata = await this.readJson(`history/${runId}.json`, runMetadataSchema.nullable(), null)
       if (metadata === null) throw new Error('Run not found')
       const index = await this.readJson('history/index.json', runIndexSchema, { version: 1, runs: [] })
-      await this.writeJson('history/index.json', { version: 1, runs: index.runs.filter(run => run.id !== runId) })
       const baselines = await this.readJson('baselines.json', baselinesSchema, { version: 1, entries: {} })
       const entries = Object.fromEntries(Object.entries(baselines.entries).filter(([, baselineRunId]) => baselineRunId !== runId))
       await this.writeJson('baselines.json', { version: 1, entries })
+      await this.writeJson('history/index.json', { version: 1, runs: index.runs.filter(run => run.id !== runId) })
       await Promise.all([
         this.removeRunFile(runId, 'txt'),
         this.removeRunFile(runId, 'svg'),
@@ -224,6 +238,12 @@ export class Store {
       metadata.hasSvg ? readFile(join(this.root, 'history', `${runId}.svg`), 'utf8') : Promise.resolve(null),
     ])
     return { ...metadata, rawResponse, svg }
+  }
+
+  async getRunSvg(runId: string): Promise<string | null> {
+    const metadata = await this.readJson(`history/${runId}.json`, runMetadataSchema.nullable(), null)
+    if (metadata === null || !metadata.hasSvg) return null
+    return readFile(join(this.root, 'history', `${runId}.svg`), 'utf8')
   }
 
   async getBaseline(profileId: string, prompt: string): Promise<RunRecord | null> {
