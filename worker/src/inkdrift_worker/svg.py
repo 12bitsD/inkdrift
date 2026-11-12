@@ -23,7 +23,6 @@ ALLOWED_ELEMENTS = {
     "textPath",
     "title",
     "desc",
-    "style",
     "linearGradient",
     "radialGradient",
     "stop",

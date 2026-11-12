@@ -17,7 +17,7 @@ protocol.registerSchemesAsPrivileged([{ scheme: 'inkdrift', privileges: { standa
 
 function validateSender(event: IpcMainInvokeEvent): void {
   const origin = event.senderFrame?.origin
-  if (origin !== APP_ORIGIN && !(process.env.NODE_ENV !== 'production' && origin === DEV_ORIGIN)) throw new Error('Untrusted IPC sender')
+  if (origin !== APP_ORIGIN && !(!app.isPackaged && origin === DEV_ORIGIN)) throw new Error('Untrusted IPC sender')
 }
 
 function handle(channel: string, callback: (event: IpcMainInvokeEvent, input: unknown) => Promise<unknown>): void {

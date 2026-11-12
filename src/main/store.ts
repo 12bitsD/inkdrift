@@ -41,7 +41,15 @@ function baselineKey(profileId: string, prompt: string): string {
 }
 
 export class Store {
+  private pendingWrites: Promise<void> = Promise.resolve()
+
   constructor(private readonly root: string) {}
+
+  private mutate<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.pendingWrites.then(operation, operation)
+    this.pendingWrites = result.then(() => undefined, () => undefined)
+    return result
+  }
 
   async initialize(): Promise<void> {
     await mkdir(this.root, { recursive: true, mode: 0o700 })
@@ -100,53 +108,61 @@ export class Store {
   }
 
   async saveProfile(input: ProfileInput): Promise<ModelProfile[]> {
-    const settings = await this.settings()
-    const existing = settings.profiles.find(profile => profile.id === input.id)
-    let encryptedKey = existing?.encryptedKey ?? ''
-    if (input.apiKey?.trim()) {
-      if (!await safeStorage.isAsyncEncryptionAvailable()) throw new Error('Secure credential storage is unavailable on this system')
-      encryptedKey = (await safeStorage.encryptStringAsync(input.apiKey.trim())).toString('base64')
-    }
-    if (!encryptedKey) throw new Error('An API key is required for a new profile')
-    const stored: StoredProfile = {
-      id: input.id,
-      name: input.name,
-      baseUrl: input.baseUrl,
-      modelId: input.modelId,
-      timeoutMs: input.timeoutMs,
-      maxOutputTokens: input.maxOutputTokens,
-      encryptedKey,
-    }
-    const profiles = existing
-      ? settings.profiles.map(profile => profile.id === input.id ? stored : profile)
-      : [...settings.profiles, stored]
-    await this.writeJson('settings.json', { ...settings, profiles })
-    return profiles.map(profile => this.publicProfile(profile))
+    return this.mutate(async () => {
+      const settings = await this.settings()
+      const existing = settings.profiles.find(profile => profile.id === input.id)
+      let encryptedKey = existing?.encryptedKey ?? ''
+      if (input.apiKey?.trim()) {
+        if (!await safeStorage.isAsyncEncryptionAvailable()) throw new Error('Secure credential storage is unavailable on this system')
+        encryptedKey = (await safeStorage.encryptStringAsync(input.apiKey.trim())).toString('base64')
+      }
+      if (!encryptedKey) throw new Error('An API key is required for a new profile')
+      const stored: StoredProfile = {
+        id: input.id,
+        name: input.name,
+        baseUrl: input.baseUrl,
+        modelId: input.modelId,
+        timeoutMs: input.timeoutMs,
+        maxOutputTokens: input.maxOutputTokens,
+        encryptedKey,
+      }
+      const profiles = existing
+        ? settings.profiles.map(profile => profile.id === input.id ? stored : profile)
+        : [...settings.profiles, stored]
+      await this.writeJson('settings.json', { ...settings, profiles })
+      return profiles.map(profile => this.publicProfile(profile))
+    })
   }
 
   async deleteProfile(profileId: string): Promise<ModelProfile[]> {
-    const settings = await this.settings()
-    const profiles = settings.profiles.filter(profile => profile.id !== profileId)
-    const baselines = await this.readJson('baselines.json', baselinesSchema, { version: 1, entries: {} })
-    const entries = Object.fromEntries(Object.entries(baselines.entries).filter(([key]) => !key.startsWith(`${profileId}:`)))
-    await this.writeJson('settings.json', {
-      ...settings,
-      profiles,
-      activeProfileId: settings.activeProfileId === profileId ? null : settings.activeProfileId,
+    return this.mutate(async () => {
+      const settings = await this.settings()
+      const profiles = settings.profiles.filter(profile => profile.id !== profileId)
+      const baselines = await this.readJson('baselines.json', baselinesSchema, { version: 1, entries: {} })
+      const entries = Object.fromEntries(Object.entries(baselines.entries).filter(([key]) => !key.startsWith(`${profileId}:`)))
+      await this.writeJson('settings.json', {
+        ...settings,
+        profiles,
+        activeProfileId: settings.activeProfileId === profileId ? null : settings.activeProfileId,
+      })
+      await this.writeJson('baselines.json', { version: 1, entries })
+      return profiles.map(profile => this.publicProfile(profile))
     })
-    await this.writeJson('baselines.json', { version: 1, entries })
-    return profiles.map(profile => this.publicProfile(profile))
   }
 
   async setActiveProfile(profileId: string): Promise<void> {
-    const settings = await this.settings()
-    if (!settings.profiles.some(profile => profile.id === profileId)) throw new Error('Model profile not found')
-    await this.writeJson('settings.json', { ...settings, activeProfileId: profileId })
+    return this.mutate(async () => {
+      const settings = await this.settings()
+      if (!settings.profiles.some(profile => profile.id === profileId)) throw new Error('Model profile not found')
+      await this.writeJson('settings.json', { ...settings, activeProfileId: profileId })
+    })
   }
 
   async setPrompt(prompt: string): Promise<void> {
-    const settings = await this.settings()
-    await this.writeJson('settings.json', { ...settings, prompt })
+    return this.mutate(async () => {
+      const settings = await this.settings()
+      await this.writeJson('settings.json', { ...settings, prompt })
+    })
   }
 
   async credentials(profileId: string): Promise<{ profile: ModelProfile; apiKey: string }> {
@@ -160,24 +176,26 @@ export class Store {
   }
 
   async saveRun(record: RunRecord): Promise<void> {
-    await writeFile(join(this.root, 'history', `${record.id}.txt`), record.rawResponse, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
-    if (record.svg !== null) {
-      await writeFile(join(this.root, 'history', `${record.id}.svg`), record.svg, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
-    }
-    const metadata: Partial<RunRecord> = { ...record }
-    delete metadata.rawResponse
-    delete metadata.svg
-    await this.writeJson(`history/${record.id}.json`, metadata)
-    const index = await this.readJson('history/index.json', runIndexSchema, { version: 1, runs: [] })
-    const runs = [metadata, ...index.runs.filter(run => run.id !== record.id)]
-    await this.writeJson('history/index.json', { version: 1, runs })
+    return this.mutate(async () => {
+      await writeFile(join(this.root, 'history', `${record.id}.txt`), record.rawResponse, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+      if (record.svg !== null) {
+        await writeFile(join(this.root, 'history', `${record.id}.svg`), record.svg, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+      }
+      const metadata: Partial<RunRecord> = { ...record }
+      delete metadata.rawResponse
+      delete metadata.svg
+      await this.writeJson(`history/${record.id}.json`, metadata)
+      const index = await this.readJson('history/index.json', runIndexSchema, { version: 1, runs: [] })
+      const runs = [metadata, ...index.runs.filter(run => run.id !== record.id)]
+      await this.writeJson('history/index.json', { version: 1, runs })
+    })
   }
 
   async getRun(runId: string): Promise<RunRecord> {
     const metadata = await this.readJson(`history/${runId}.json`, runMetadataSchema.nullable(), null)
     if (metadata === null) throw new Error('Run not found')
     const [rawResponse, svg] = await Promise.all([
-      readFile(join(this.root, 'history', `${runId}.txt`), 'utf8').catch(() => ''),
+      readFile(join(this.root, 'history', `${runId}.txt`), 'utf8'),
       metadata.hasSvg ? readFile(join(this.root, 'history', `${runId}.svg`), 'utf8') : Promise.resolve(null),
     ])
     return { ...metadata, rawResponse, svg }
@@ -196,11 +214,13 @@ export class Store {
   }
 
   async setBaseline(runId: string): Promise<void> {
-    const run = await this.getRun(runId)
-    if (run.status !== 'succeeded' || run.svg === null) throw new Error('Only a successful SVG run can be a baseline')
-    const baselines = await this.readJson('baselines.json', baselinesSchema, { version: 1, entries: {} })
-    const entries = { ...baselines.entries, [baselineKey(run.profileId, run.prompt)]: runId }
-    await this.writeJson('baselines.json', { version: 1, entries })
+    return this.mutate(async () => {
+      const run = await this.getRun(runId)
+      if (run.status !== 'succeeded' || run.svg === null) throw new Error('Only a successful SVG run can be a baseline')
+      const baselines = await this.readJson('baselines.json', baselinesSchema, { version: 1, entries: {} })
+      const entries = { ...baselines.entries, [baselineKey(run.profileId, run.prompt)]: runId }
+      await this.writeJson('baselines.json', { version: 1, entries })
+    })
   }
 
   metadata(input: Omit<RunMetadata, 'promptHash' | 'usage'> & { usage?: TokenUsage }): RunMetadata {
