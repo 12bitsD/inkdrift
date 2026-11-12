@@ -45,7 +45,7 @@ function HistoryEntry({ run, selected, onSelect }: { run: RunMetadata; selected:
         <span className={svg ? 'history-thumb' : 'history-thumb empty'}>
           {svg ? <SvgImage svg={svg} alt="" /> : <Icon name={run.status === 'succeeded' ? 'history' : 'close'} size={20} />}
         </span>
-        <span className="history-copy"><strong>{run.profileName}</strong><small className="history-prompt">{run.prompt}</small><small>{formatDate(run.createdAt)}</small></span>
+        <span className="history-copy"><strong>{run.profileName}</strong><small className="history-prompt">{run.prompt}</small><small className="history-meta">{run.modelId} · {formatDate(run.createdAt)}</small></span>
         <span className={run.status === 'succeeded' ? 'run-mark success' : 'run-mark'} aria-label={run.status} />
       </button>
     </li>
@@ -319,11 +319,11 @@ export function App() {
       <header className="app-header" inert={compactHistory && historyOpen}>
         <div className="brand-block">
           <svg className="brand-mark" viewBox="0 0 36 36" aria-hidden="true"><rect x="1" y="1" width="34" height="34" rx="8" fill="currentColor" /><rect x="8" y="11" width="13" height="16" fill="none" stroke="#f7f7f5" opacity=".42" /><rect x="15" y="7" width="13" height="16" fill="#151515" stroke="#f7f7f5" /><rect x="24" y="25" width="5" height="5" fill="#f7f7f5" /></svg>
-          <div><h1>inkdrift<span className="brand-period">.</span></h1><p>A visual canary for language models</p></div>
+          <div><h1>inkdrift<span className="brand-period">.</span></h1><p><span>A visual canary for language models</span><span className="brand-edition">SVG / 001</span></p></div>
         </div>
         <div className="header-actions">
           <button ref={historyTrigger} className="icon-button history-toggle" type="button" aria-label="Open history" aria-expanded={historyOpen} aria-controls="history-sidebar" onClick={() => setHistoryOpen(true)}><Icon name="history" size={20} /></button>
-          <div className="model-selector"><label htmlFor="active-model">MODEL</label><select id="active-model" value={activeProfileId ?? ''} onChange={event => { void selectProfile(event.target.value) }} disabled={generating || deleting || profiles.length === 0}><option value="" disabled>{profiles.length ? 'Select a profile' : 'No profiles yet'}</option>{profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.name} · {profile.modelId}</option>)}</select></div>
+          <div className="model-selector"><label htmlFor="active-model">MODEL PROFILE</label><select id="active-model" value={activeProfileId ?? ''} onChange={event => { void selectProfile(event.target.value) }} disabled={generating || deleting || profiles.length === 0}><option value="" disabled>{profiles.length ? 'Select a profile' : 'No profiles yet'}</option>{profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.name} · {profile.modelId}</option>)}</select></div>
           <button className="icon-button settings-button" type="button" aria-label="Open model settings" disabled={deleting} onClick={() => setSettingsOpen(true)}><Icon name="settings" size={20} /></button>
           {generating ? <button className="button primary generate-button" type="button" onClick={() => { void window.inkdrift.cancelGeneration() }}><Icon name="cancel" /> Cancel</button> : <button className="button primary generate-button" type="button" title="Generate (Ctrl/Cmd+Enter)" disabled={!activeProfile || !prompt.trim() || deleting} onClick={() => { void generate() }}><Icon name="generate" /> Generate</button>}
         </div>
@@ -342,7 +342,7 @@ export function App() {
         <main className="workspace" id="workspace" inert={compactHistory && historyOpen}>
           <section className="prompt-strip" aria-labelledby="prompt-heading">
             <div className="prompt-number">01</div>
-            <div className="prompt-content"><div className="prompt-heading"><h2 id="prompt-heading">The brief</h2><span>One prompt. Two points in time.</span></div><label className="visually-hidden" htmlFor="svg-prompt">SVG generation prompt</label><textarea id="svg-prompt" value={prompt} onChange={event => setPrompt(event.target.value)} disabled={generating || deleting} rows={2} maxLength={100000} spellCheck={false} onBlur={() => {
+            <div className="prompt-content"><div className="prompt-heading"><div><h2 id="prompt-heading">The brief</h2><p>One prompt. Two points in time.</p></div><span className="prompt-shortcut" aria-label="Generate with Control or Command plus Enter"><kbd>Ctrl / Cmd</kbd><kbd>Enter</kbd></span></div><label className="visually-hidden" htmlFor="svg-prompt">SVG generation prompt</label><textarea id="svg-prompt" value={prompt} onChange={event => setPrompt(event.target.value)} disabled={generating || deleting} rows={2} maxLength={100000} spellCheck={false} onBlur={() => {
               if (prompt.trim()) void window.inkdrift.setPrompt(prompt.trim()).catch(() => {})
             }} /></div>
             <button className="icon-button prompt-reset" type="button" aria-label="Reset to the Charmander prompt" onClick={() => setPrompt(DEFAULT_PROMPT)} disabled={generating || deleting}><Icon name="refresh" /></button>
@@ -350,12 +350,15 @@ export function App() {
 
           {(error || notice) && <div className={error ? 'app-message error' : 'app-message'} role={error ? 'alert' : 'status'}><span>{error || notice}</span><button type="button" aria-label="Dismiss message" onClick={() => { setError(''); setNotice('') }}><Icon name="close" size={15} /></button></div>}
 
-          <div className="view-controls" aria-label="Comparison zoom controls">
-            <span className="eyebrow">VIEW</span>
-            <button className="icon-button" type="button" aria-label="Zoom out" title="Zoom out" disabled={zoom <= 50} onClick={() => setZoom(value => Math.max(50, value - 25))}>−</button>
-            <output className="zoom-value" aria-label="Zoom level">{zoom}%</output>
-            <button className="icon-button" type="button" aria-label="Zoom in" title="Zoom in" disabled={zoom >= 200} onClick={() => setZoom(value => Math.min(200, value + 25))}>+</button>
-            <button className="button secondary fit-button" type="button" disabled={zoom === 100} onClick={() => setZoom(100)}>Fit</button>
+          <div className="comparison-heading">
+            <div className="comparison-title"><span className="prompt-number">02</span><div><p className="eyebrow">THE COMPARISON</p><h2>Frame by frame.</h2></div></div>
+            <div className="view-controls" aria-label="Comparison zoom controls">
+              <span className="eyebrow">VIEW</span>
+              <button className="icon-button" type="button" aria-label="Zoom out" title="Zoom out" disabled={zoom <= 50} onClick={() => setZoom(value => Math.max(50, value - 25))}>−</button>
+              <output className="zoom-value" aria-label="Zoom level">{zoom}%</output>
+              <button className="icon-button" type="button" aria-label="Zoom in" title="Zoom in" disabled={zoom >= 200} onClick={() => setZoom(value => Math.min(200, value + 25))}>+</button>
+              <button className="button secondary fit-button" type="button" disabled={zoom === 100} onClick={() => setZoom(100)}>Fit</button>
+            </div>
           </div>
           <div className="comparison-grid">
             <RunPanel title="BASELINE" record={baseline} emptyTitle="No baseline for this brief" emptyDescription="Generate an SVG you like, then explicitly save it as your visual reference." onCode={setCodeRun} emptyProfileName={activeProfile?.name} zoom={zoom} />

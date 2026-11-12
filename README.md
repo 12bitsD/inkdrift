@@ -170,7 +170,7 @@ pnpm dev
 
 ## License
 
-Inkdrift is available under the [MIT License](LICENSE).
+Inkdrift is available under the [MIT License](LICENSE). Geist, Geist Mono, and Instrument Serif are distributed under the SIL Open Font License; their notices are included in `public/licenses/`.
 
 ## Community
 
