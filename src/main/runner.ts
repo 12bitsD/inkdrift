@@ -14,7 +14,7 @@ type RunOutcome = Pick<RunRecord, 'status' | 'errorCode' | 'errorMessage' | 'raw
 
 function workerCommand(): { command: string; args: string[]; pythonPath?: string } {
   if (app.isPackaged) {
-    return { command: join(process.resourcesPath, 'worker', process.platform === 'win32' ? 'inkdrift-worker.exe' : 'inkdrift-worker'), args: [] }
+    return { command: join(process.resourcesPath, 'worker', 'inkdrift-worker', process.platform === 'win32' ? 'inkdrift-worker.exe' : 'inkdrift-worker'), args: [] }
   }
   const root = app.getAppPath()
   const command = process.env.INKDRIFT_PYTHON ?? resolve(root, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python')
