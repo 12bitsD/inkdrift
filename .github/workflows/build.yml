@@ -13,9 +13,7 @@ jobs:
       matrix:
         include:
           - os: macos-15-intel
-            artifact: macos-x64
-          - os: macos-latest
-            artifact: macos-arm64
+            artifact: macos-universal
           - os: windows-latest
             artifact: windows-x64
     runs-on: ${{ matrix.os }}
@@ -61,14 +59,41 @@ jobs:
             .venv/bin/python -m ruff check worker
             .venv/bin/python -m ruff format --check worker
           fi
-      - name: Package application
-        run: pnpm dist
-      - name: Smoke packaged worker
+      - name: Package macOS x64
+        if: runner.os == 'macOS'
+        run: |
+          pnpm build
+          pnpm build:worker
+          pnpm exec electron-builder --x64 --publish never
+          mv release release-x64
+      - name: Smoke macOS x64 worker
+        if: runner.os == 'macOS'
         run: |
           python - <<'PY'
           import json, subprocess
-          path = 'worker/dist/inkdrift-worker/inkdrift-worker.exe' if __import__('os').name == 'nt' else 'worker/dist/inkdrift-worker/inkdrift-worker'
-          result = subprocess.run([path], input='{}', text=True, capture_output=True, timeout=15, check=False)
+          result = subprocess.run(['worker/dist/inkdrift-worker/inkdrift-worker'], input='{}', text=True, capture_output=True, timeout=15, check=False)
+          assert result.returncode == 1, (result.returncode, result.stderr)
+          assert json.loads(result.stdout)['code'] == 'invalid-input', result.stdout
+          print('x64 Nextloop worker starts and validates stdio input.')
+          PY
+      - name: Package macOS arm64
+        if: runner.os == 'macOS'
+        run: |
+          INKDRIFT_WORKER_ARCH=arm64 pnpm build:worker
+          pnpm exec electron-builder --arm64 --publish never
+          mv release release-arm64
+      - name: Verify macOS arm64 worker
+        if: runner.os == 'macOS'
+        run: file release-arm64/Inkdrift.app/Contents/Resources/worker/inkdrift-worker/inkdrift-worker | grep -E 'Mach-O 64-bit executable arm64|Mach-O 64-bit executable.*arm64'
+      - name: Package Windows application
+        if: runner.os == 'Windows'
+        run: pnpm dist
+      - name: Smoke packaged worker
+        if: runner.os == 'Windows'
+        run: |
+          python - <<'PY'
+          import json, subprocess
+          result = subprocess.run(['worker/dist/inkdrift-worker/inkdrift-worker.exe'], input='{}', text=True, capture_output=True, timeout=15, check=False)
           assert result.returncode == 1, (result.returncode, result.stderr)
           assert json.loads(result.stdout)['code'] == 'invalid-input', result.stdout
           print('Packaged Nextloop worker starts and validates stdio input.')
@@ -76,5 +101,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: inkdrift-${{ matrix.artifact }}
-          path: release/*
+          path: release*/**
           if-no-files-found: error

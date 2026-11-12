@@ -17,6 +17,7 @@ const result = spawnSync(python, [
   '--specpath', resolve(root, 'worker/build'),
   '--paths', resolve(root, 'worker/src'),
   '--collect-all', 'nextloop',
+  ...(process.env.INKDRIFT_WORKER_ARCH ? ['--target-architecture', process.env.INKDRIFT_WORKER_ARCH] : []),
   resolve(root, 'worker/src/inkdrift_worker_cli.py'),
 ], { cwd: root, stdio: 'inherit' })
 
