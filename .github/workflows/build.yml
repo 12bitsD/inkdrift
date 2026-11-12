@@ -89,7 +89,14 @@ jobs:
           mv release release-arm64
       - name: Verify macOS arm64 worker
         if: runner.os == 'macOS'
-        run: file release-arm64/Inkdrift.app/Contents/Resources/worker/inkdrift-worker/inkdrift-worker | grep -E 'Mach-O 64-bit executable arm64|Mach-O 64-bit executable.*arm64'
+        run: |
+          python - <<'PY'
+          import subprocess
+          path = 'release-arm64/Inkdrift.app/Contents/Resources/worker/inkdrift-worker/inkdrift-worker'
+          output = subprocess.check_output(['file', path], text=True)
+          print(output)
+          assert 'arm64' in output, output
+          PY
       - name: Package Windows application
         if: runner.os == 'Windows'
         run: pnpm dist
