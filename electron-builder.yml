@@ -6,6 +6,7 @@ files:
   - dist-electron/**/*
   - dist-renderer/**/*
   - package.json
+  - assets/icon.png
 extraResources:
   - from: worker/dist
     to: worker
@@ -14,11 +15,13 @@ extraResources:
       - inkdrift-worker.exe
       - _internal/**/*
 mac:
+  icon: assets/icon.icns
   target:
     - dmg
     - zip
   category: public.app-category.developer-tools
 win:
+  icon: assets/icon.ico
   target:
     - nsis
 nsis:

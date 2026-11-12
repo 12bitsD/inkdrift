@@ -63,10 +63,11 @@ function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 960,
-    minWidth: 960,
+    minWidth: 840,
     minHeight: 680,
     backgroundColor: '#f3f3f3',
     title: 'Inkdrift',
+    icon: join(app.getAppPath(), 'assets/icon.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,

@@ -36,6 +36,8 @@
   :where(button, a, input, select, textarea, pre):focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
   ::selection { background: var(--ink); color: var(--surface); }
   h1, h2, h3, p { margin: 0; }
+  h1, h2, h3 { text-wrap: balance; }
+  p, li { text-wrap: pretty; }
   ul { margin: 0; padding: 0; list-style: none; }
   .visually-hidden { position: absolute; clip-path: inset(50%); overflow: hidden; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; white-space: nowrap; }
   .skip-link { position: fixed; inset-block-start: 8px; inset-inline-start: 8px; z-index: 100; padding: 10px 14px; background: var(--ink); color: white; transform: translateY(-150%); }
@@ -44,7 +46,7 @@
 
 @layer layout {
   .app-shell { min-block-size: 100dvh; }
-  .app-header { block-size: 78px; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding-inline: 26px; border-block-end: 1px solid var(--ink); background: var(--surface); }
+  .app-header { min-block-size: 78px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 24px; padding: 12px 26px; border-block-end: 1px solid var(--ink); background: var(--surface); }
   .app-body { display: grid; grid-template-columns: 272px minmax(0, 1fr); min-block-size: calc(100dvh - 78px); }
   .history-sidebar { display: flex; flex-direction: column; min-block-size: calc(100dvh - 78px); border-inline-end: 1px solid var(--line-strong); background: var(--paper-deep); }
   .workspace { min-inline-size: 0; padding: 28px 30px 18px; }
@@ -60,7 +62,8 @@
   .brand-period { font-family: var(--font-ui); }
   .brand-block p { margin-block-start: 5px; color: var(--muted); font-family: var(--font-mono); font-size: 8px; letter-spacing: .8px; text-transform: uppercase; }
   .header-actions { gap: 10px; }
-  .model-selector { gap: 10px; margin-inline-end: 6px; }
+  .model-selector { gap: 10px; min-inline-size: 0; margin-inline-end: 6px; }
+  .model-selector select { min-inline-size: 0; }
   .model-selector label, .history-search label { color: var(--muted); font-family: var(--font-mono); font-size: 9px; letter-spacing: 1.2px; }
   select, input, textarea { border: 1px solid var(--line-strong); border-radius: 0; background: var(--surface-strong); }
   select { min-block-size: 38px; max-inline-size: 240px; padding: 7px 30px 7px 10px; font-size: 12px; }
@@ -170,21 +173,35 @@
 @layer responsive {
   @media (max-width: 1180px) {
     .app-body { grid-template-columns: 232px minmax(0, 1fr); }
+    .model-selector select { max-inline-size: 190px; }
     .workspace { padding-inline: 22px; }
     .comparison-grid { gap: 16px; }
     .canvas-frame { min-block-size: 300px; }
     .run-panel-footer { align-items: flex-start; flex-direction: column; }
   }
   @media (max-width: 1000px) {
-    .app-header { padding-inline: 18px; }
+    .app-header { padding-inline: 18px; gap: 12px; }
+    .header-actions { flex: 1; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
     .brand-block p { display: none; }
+    .model-selector { flex: 1 1 170px; }
+    .model-selector select { inline-size: 100%; max-inline-size: 190px; }
     .model-selector label { display: none; }
     .comparison-grid { grid-template-columns: 1fr; }
     .canvas-frame { max-block-size: none; aspect-ratio: 1.45 / 1; }
     .run-panel-footer { flex-direction: row; }
     .workspace-footer { justify-content: center; }
   }
+  @media (max-width: 900px) {
+    .app-body { grid-template-columns: 210px minmax(0, 1fr); }
+    .brand-block h1 { font-size: 26px; }
+  }
   @media (max-width: 720px) {
+    .app-header { align-items: flex-start; }
+    .brand-block { inline-size: 100%; }
+    .header-actions { inline-size: 100%; }
+    .model-selector { flex: 1 1 150px; margin-inline-end: 0; }
+    .model-selector select { max-inline-size: none; }
+    .generate-button { min-inline-size: 112px; }
     .app-body { grid-template-columns: 1fr; }
     .history-sidebar { display: none; }
     .settings-layout { grid-template-columns: 1fr; }
