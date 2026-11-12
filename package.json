@@ -1,0 +1,42 @@
+{
+  "name": "inkdrift",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A visual canary for language models.",
+  "author": "12bitsD",
+  "main": "dist-electron/main/index.js",
+  "packageManager": "pnpm@12.5.1",
+  "scripts": {
+    "dev": "pnpm build:electron && concurrently -k -s first \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && electron .\"",
+    "build": "pnpm typecheck && pnpm build:renderer && pnpm build:electron",
+    "build:renderer": "vite build",
+    "build:electron": "tsc -p tsconfig.node.json",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
+    "lint": "eslint .",
+    "dist": "pnpm build && pnpm build:worker && electron-builder --publish never",
+    "build:worker": "node scripts/build-worker.mjs",
+    "start": "electron ."
+  },
+  "dependencies": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "26.6.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.3.0",
+    "concurrently": "10.0.7",
+    "electron": "45.3.1",
+    "electron-builder": "26.18.0",
+    "eslint": "10.14.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "eslint-plugin-react-refresh": "0.5.7",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.2",
+    "vite": "8.3.8",
+    "wait-on": "9.5.1"
+  }
+}

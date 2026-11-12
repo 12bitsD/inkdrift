@@ -1,0 +1,16 @@
+node_modules/
+dist-renderer/
+dist-electron/
+release/
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+worker/build/
+worker/dist/
+*.spec
+.DS_Store
+.env
+.env.*
+!.env.example
+*.log

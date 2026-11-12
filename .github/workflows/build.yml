@@ -1,0 +1,80 @@
+name: build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-13
+            artifact: macos-x64
+          - os: macos-14
+            artifact: macos-arm64
+          - os: windows-latest
+            artifact: windows-x64
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.5.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          pnpm install --frozen-lockfile
+          python -m venv .venv
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            .venv/Scripts/python -m pip install -e 'worker[dev,build]'
+          else
+            .venv/bin/python -m pip install -e 'worker[dev,build]'
+          fi
+      - name: Check TypeScript and UI
+        run: |
+          pnpm lint
+          pnpm build
+          pnpm peers check
+      - name: Check Python worker
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            .venv/Scripts/python -m mypy worker/src
+            .venv/Scripts/python -m ruff check worker
+            .venv/Scripts/python -m ruff format --check worker
+          else
+            .venv/bin/python -m mypy worker/src
+            .venv/bin/python -m ruff check worker
+            .venv/bin/python -m ruff format --check worker
+          fi
+      - name: Package application
+        run: pnpm dist
+      - name: Smoke packaged worker
+        run: |
+          python - <<'PY'
+          import json, subprocess
+          path = 'worker/dist/inkdrift-worker/inkdrift-worker.exe' if __import__('os').name == 'nt' else 'worker/dist/inkdrift-worker/inkdrift-worker'
+          result = subprocess.run([path], input='{}', text=True, capture_output=True, timeout=15, check=False)
+          assert result.returncode == 1, (result.returncode, result.stderr)
+          assert json.loads(result.stdout)['code'] == 'invalid-input', result.stdout
+          print('Packaged Nextloop worker starts and validates stdio input.')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: inkdrift-${{ matrix.artifact }}
+          path: release/*
+          if-no-files-found: error

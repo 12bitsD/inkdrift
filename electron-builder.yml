@@ -1,0 +1,28 @@
+appId: com.inkdrift.app
+productName: Inkdrift
+directories:
+  output: release
+files:
+  - dist-electron/**/*
+  - dist-renderer/**/*
+  - package.json
+extraResources:
+  - from: worker/dist
+    to: worker
+    filter:
+      - inkdrift-worker
+      - inkdrift-worker.exe
+      - _internal/**/*
+mac:
+  target:
+    - dmg
+    - zip
+  category: public.app-category.developer-tools
+win:
+  target:
+    - nsis
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+publish: null
