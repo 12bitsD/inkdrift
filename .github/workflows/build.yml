@@ -92,7 +92,8 @@ jobs:
         run: |
           python - <<'PY'
           import re, subprocess
-          path = 'release-arm64/Inkdrift.app/Contents/Resources/worker/inkdrift-worker/inkdrift-worker'
+          path = subprocess.check_output(['find', 'release-arm64', '-type', 'f', '-name', 'inkdrift-worker', '-print', '-quit'], text=True).strip()
+          assert path, 'No arm64 worker found in packaged app'
           output = subprocess.check_output(['file', path], text=True)
           print(output)
           assert re.search(r'Mach-O.*\barm64\b', output), output
