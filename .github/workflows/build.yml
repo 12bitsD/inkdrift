@@ -59,14 +59,25 @@ jobs:
             .venv/bin/python -m ruff check worker
             .venv/bin/python -m ruff format --check worker
           fi
+      - name: Build worker for checks
+        if: runner.os == 'macOS'
+        run: pnpm build:worker
       - name: Package macOS x64
         if: runner.os == 'macOS' && github.event_name != 'pull_request'
         run: |
           pnpm exec electron-builder --x64 --publish never
           mv release release-x64
-      - name: Build worker for checks
-        if: runner.os == 'macOS'
-        run: pnpm build:worker
+      - name: Verify macOS x64 worker
+        if: runner.os == 'macOS' && github.event_name != 'pull_request'
+        run: |
+          python - <<'PY'
+          import re, subprocess
+          path = subprocess.check_output(['find', 'release-x64', '-type', 'f', '-name', 'inkdrift-worker', '-print', '-quit'], text=True).strip()
+          assert path, 'No x64 worker found in packaged app'
+          output = subprocess.check_output(['file', path], text=True)
+          print(output)
+          assert re.search(r'Mach-O.*\bx86_64\b', output), output
+          PY
       - name: Smoke macOS x64 worker
         if: runner.os == 'macOS'
         run: |
