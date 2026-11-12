@@ -133,7 +133,7 @@ export class Runner {
         usage: response.usage ?? EMPTY_USAGE,
       }
     } catch {
-      return this.failure('worker-error', 'The Nextloop worker returned an unreadable result')
+      return { ...this.failure('worker-error', 'The Nextloop worker returned an unreadable result'), rawResponse: stdout }
     }
   }
 

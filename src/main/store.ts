@@ -208,8 +208,9 @@ export class Store {
     try {
       const run = await this.getRun(runId)
       return run.profileId === profileId && run.promptHash === promptHash(prompt) && run.status === 'succeeded' ? run : null
-    } catch {
-      return null
+    } catch (error) {
+      if (error instanceof Error && error.message === 'Run not found') return null
+      throw error
     }
   }
 

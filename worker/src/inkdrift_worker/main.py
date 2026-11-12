@@ -1,4 +1,5 @@
 import asyncio
+import ipaddress
 import json
 import os
 import sys
@@ -25,14 +26,21 @@ def integer(value: Any, minimum: int, maximum: int) -> int:
     return value
 
 
+def is_loopback(hostname: str | None) -> bool:
+    if hostname is None:
+        return False
+    if hostname == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(hostname).is_loopback
+    except ValueError:
+        return False
+
+
 def base_url(value: Any) -> str:
     raw = string(value)
     parsed = urlparse(raw)
-    loopback = (
-        parsed.hostname == "localhost"
-        or parsed.hostname == "::1"
-        or (parsed.hostname is not None and parsed.hostname.startswith("127."))
-    )
+    loopback = is_loopback(parsed.hostname)
     if (
         parsed.scheme not in {"http", "https"}
         or parsed.hostname is None

@@ -111,6 +111,14 @@ export function App() {
   }, [prompt])
 
   useEffect(() => {
+    const flushPrompt = () => {
+      if (prompt.trim()) void window.inkdrift.setPrompt(prompt.trim()).catch(() => {})
+    }
+    window.addEventListener('beforeunload', flushPrompt)
+    return () => window.removeEventListener('beforeunload', flushPrompt)
+  }, [prompt])
+
+  useEffect(() => {
     const request = ++baselineRequest.current
     const timer = window.setTimeout(() => {
       setBaseline(null)
@@ -204,7 +212,9 @@ export function App() {
         <main className="workspace" id="workspace">
           <section className="prompt-strip" aria-labelledby="prompt-heading">
             <div className="prompt-number">01</div>
-            <div className="prompt-content"><div className="prompt-heading"><h2 id="prompt-heading">The brief</h2><span>One prompt. Two points in time.</span></div><label className="visually-hidden" htmlFor="svg-prompt">SVG generation prompt</label><textarea id="svg-prompt" value={prompt} onChange={event => setPrompt(event.target.value)} disabled={generating} rows={2} maxLength={100000} spellCheck={false} /></div>
+            <div className="prompt-content"><div className="prompt-heading"><h2 id="prompt-heading">The brief</h2><span>One prompt. Two points in time.</span></div><label className="visually-hidden" htmlFor="svg-prompt">SVG generation prompt</label><textarea id="svg-prompt" value={prompt} onChange={event => setPrompt(event.target.value)} disabled={generating} rows={2} maxLength={100000} spellCheck={false} onBlur={() => {
+              if (prompt.trim()) void window.inkdrift.setPrompt(prompt.trim()).catch(() => {})
+            }} /></div>
             <button className="icon-button prompt-reset" type="button" aria-label="Reset to the Charmander prompt" onClick={() => setPrompt(DEFAULT_PROMPT)} disabled={generating}><Icon name="refresh" /></button>
           </section>
 

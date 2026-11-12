@@ -91,11 +91,11 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           python - <<'PY'
-          import subprocess
+          import re, subprocess
           path = 'release-arm64/Inkdrift.app/Contents/Resources/worker/inkdrift-worker/inkdrift-worker'
           output = subprocess.check_output(['file', path], text=True)
           print(output)
-          assert 'arm64' in output, output
+          assert re.search(r'Mach-O.*\barm64\b', output), output
           PY
       - name: Package Windows application
         if: runner.os == 'Windows'

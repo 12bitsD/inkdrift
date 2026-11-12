@@ -1,12 +1,21 @@
+import { isIP } from 'node:net'
 import { z } from 'zod'
 
 export const runIdSchema = z.uuid()
 
 export const promptSchema = z.string().trim().min(1, 'Prompt is required').max(100_000)
 
+function isLoopbackHost(hostname: string): boolean {
+  if (hostname === 'localhost') return true
+  const normalized = hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname
+  if (normalized === '::1') return true
+  if (isIP(normalized) !== 4) return false
+  return normalized.split('.')[0] === '127'
+}
+
 function safeBaseUrl(value: string): string {
   const url = new URL(value)
-  const loopback = url.hostname === 'localhost' || url.hostname === '::1' || url.hostname.startsWith('127.')
+  const loopback = isLoopbackHost(url.hostname)
   if (!['https:', 'http:'].includes(url.protocol)) throw new Error('Base URL must use HTTP or HTTPS')
   if (url.protocol === 'http:' && !loopback) throw new Error('Remote providers must use HTTPS')
   if (url.username || url.password || url.search || url.hash) throw new Error('Base URL cannot contain credentials, query, or fragment')
