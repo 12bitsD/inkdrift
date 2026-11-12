@@ -1,0 +1,52 @@
+name: Bug report
+description: Report a reproducible problem with the desktop app or build
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the behavior and where it occurred.
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options: [macOS Apple Silicon, macOS Intel, Windows x64]
+    validations:
+      required: true
+  - type: input
+    id: build
+    attributes:
+      label: Build or commit
+      placeholder: "For example: 6cb1977"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: List the smallest sequence that reproduces the issue.
+      placeholder: "1. Open Inkdrift\n2. Select a model profile\n3. Generate a frame"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs or screenshots
+      description: Redact API keys, private prompts, authorization headers, and personal History data.
+  - type: checkboxes
+    id: redaction
+    attributes:
+      label: Privacy check
+      options:
+        - label: This report contains no credentials or private user data.
+          required: true

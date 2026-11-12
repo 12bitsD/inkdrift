@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
+  <title id="title">Inkdrift — A visual canary for language models</title>
+  <desc id="desc">Two offset monochrome frames compare a generated drawing over time. Same prompt, a different frame. No judge, no score.</desc>
+  <rect width="1280" height="640" fill="#f3f3f0"/>
+  <rect width="1280" height="10" fill="#151515"/>
+  <g transform="translate(72 62) scale(.7)">
+    <rect x="2" y="2" width="124" height="124" rx="28" fill="#151515"/>
+    <rect x="27" y="39" width="49" height="56" fill="none" stroke="#f7f7f5" stroke-width="5" opacity=".42"/>
+    <rect x="51" y="25" width="49" height="56" fill="#151515" stroke="#f7f7f5" stroke-width="5"/>
+    <rect x="84" y="89" width="16" height="16" fill="#f7f7f5"/>
+  </g>
+  <text x="174" y="127" fill="#151515" font-family="Iowan Old Style, Palatino Linotype, Georgia, serif" font-size="66" font-weight="600" letter-spacing="-3">inkdrift.</text>
+  <text x="76" y="194" fill="#555" font-family="SFMono-Regular, Consolas, monospace" font-size="15" letter-spacing="2.4">A VISUAL CANARY FOR LANGUAGE MODELS</text>
+  <text x="72" y="286" fill="#151515" font-family="Iowan Old Style, Palatino Linotype, Georgia, serif" font-size="55">Same prompt.</text>
+  <text x="72" y="350" fill="#151515" font-family="Iowan Old Style, Palatino Linotype, Georgia, serif" font-size="55">A different frame.</text>
+  <line x1="76" y1="392" x2="604" y2="392" stroke="#b5b5b0"/>
+  <text x="76" y="432" fill="#151515" font-family="SFMono-Regular, Consolas, monospace" font-size="15" letter-spacing="1.2">NO JUDGE. NO SCORE. JUST THE FRAMES.</text>
+  <text x="76" y="494" fill="#737373" font-family="SFMono-Regular, Consolas, monospace" font-size="13">ONE SELF-CONTAINED SVG · TWO POINTS IN TIME</text>
+
+  <rect x="738" y="150" width="354" height="318" fill="none" stroke="#a8a8a3" stroke-width="1.5"/>
+  <text x="738" y="136" fill="#737373" font-family="SFMono-Regular, Consolas, monospace" font-size="12" letter-spacing="1.8">BASELINE</text>
+  <rect x="812" y="86" width="380" height="410" fill="#fdfdfb" stroke="#151515" stroke-width="1.5"/>
+  <text x="812" y="70" fill="#151515" font-family="SFMono-Regular, Consolas, monospace" font-size="12" letter-spacing="1.8">CURRENT</text>
+  <g transform="translate(846 190)" fill="none" stroke="#414141" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="76" cy="196" r="57"/>
+    <circle cx="76" cy="196" r="47" opacity=".25"/>
+    <circle cx="239" cy="196" r="57"/>
+    <circle cx="239" cy="196" r="47" opacity=".25"/>
+    <path d="M76 196 132 112 191 196H76Zm56-84h58l51 84M132 112l-17-27H86M191 196 164 34M151 52h29"/>
+    <circle cx="158" cy="54" r="43"/>
+    <path d="M189 23c23-26 45-9 35 11 22-4 26 24 7 31 14 18-3 33-20 25M130 53h3m39 0h3M144 74c10 8 21 8 30 0M139 99l-7 13m45-15 14 15"/>
+  </g>
+  <text x="1002" y="472" text-anchor="end" fill="#737373" font-family="SFMono-Regular, Consolas, monospace" font-size="11">FRAME / 002</text>
+  <rect x="1168" y="470" width="10" height="10" fill="#151515"/>
+  <line x1="72" y1="550" x2="1208" y2="550" stroke="#151515"/>
+  <text x="76" y="592" fill="#151515" font-family="SFMono-Regular, Consolas, monospace" font-size="13" letter-spacing="1.4">MACOS + WINDOWS · LOCAL HISTORY</text>
+  <text x="1204" y="592" text-anchor="end" fill="#151515" font-family="SFMono-Regular, Consolas, monospace" font-size="13" letter-spacing="1.4">NEXTLOOP / OPENAI-COMPATIBLE</text>
+</svg>

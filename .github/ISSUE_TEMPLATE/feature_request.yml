@@ -1,0 +1,30 @@
+name: Feature request
+description: Suggest a focused improvement to the visual canary
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What user problem should this solve?
+      description: Start with the workflow or friction, not a proposed framework.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe what a user would see and do.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Product boundaries
+      options:
+        - label: This does not require an IQ score, automatic degradation verdict, or model ranking.
+          required: true
