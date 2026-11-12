@@ -1,4 +1,4 @@
-export type IconName = 'generate' | 'settings' | 'code' | 'baseline' | 'refresh' | 'close' | 'plus' | 'trash' | 'history' | 'arrow' | 'check' | 'cancel'
+export type IconName = 'generate' | 'settings' | 'code' | 'baseline' | 'refresh' | 'close' | 'plus' | 'trash' | 'history' | 'arrow' | 'check' | 'cancel' | 'download' | 'copy'
 
 export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
   const paths: Record<IconName, React.ReactNode> = {
@@ -14,6 +14,8 @@ export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
     arrow: <path d="m9 5 7 7-7 7" />,
     check: <path d="m5 12 4 4L19 6" />,
     cancel: <><circle cx="12" cy="12" r="9" /><path d="m8 8 8 8M16 8l-8 8" /></>,
+    download: <><path d="M12 3v12M7 10l5 5 5-5M5 17v4h14v-4" /></>,
+    copy: <><rect x="8" y="8" width="12" height="13" rx="1" /><path d="M5 16V4a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v9" /></>,
   }
   return <svg aria-hidden="true" viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>
 }

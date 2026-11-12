@@ -11,6 +11,8 @@ const api: InkdriftApi = {
   generate: (profileId, prompt) => ipcRenderer.invoke('generation:run', { profileId, prompt }),
   cancelGeneration: () => ipcRenderer.invoke('generation:cancel'),
   getRun: runId => ipcRenderer.invoke('run:get', runId),
+  copyRun: runId => ipcRenderer.invoke('run:copy', runId),
+  deleteRun: runId => ipcRenderer.invoke('run:delete', runId),
   getBaseline: (profileId, prompt) => ipcRenderer.invoke('baseline:get', { profileId, prompt }),
   setBaseline: runId => ipcRenderer.invoke('baseline:set', runId),
 }

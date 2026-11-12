@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { safeStorage } from 'electron'
 import { z } from 'zod'
@@ -189,6 +189,31 @@ export class Store {
       const runs = [metadata, ...index.runs.filter(run => run.id !== record.id)]
       await this.writeJson('history/index.json', { version: 1, runs })
     })
+  }
+
+  async deleteRun(runId: string): Promise<void> {
+    return this.mutate(async () => {
+      const metadata = await this.readJson(`history/${runId}.json`, runMetadataSchema.nullable(), null)
+      if (metadata === null) throw new Error('Run not found')
+      const index = await this.readJson('history/index.json', runIndexSchema, { version: 1, runs: [] })
+      await this.writeJson('history/index.json', { version: 1, runs: index.runs.filter(run => run.id !== runId) })
+      const baselines = await this.readJson('baselines.json', baselinesSchema, { version: 1, entries: {} })
+      const entries = Object.fromEntries(Object.entries(baselines.entries).filter(([, baselineRunId]) => baselineRunId !== runId))
+      await this.writeJson('baselines.json', { version: 1, entries })
+      await Promise.all([
+        this.removeRunFile(runId, 'txt'),
+        this.removeRunFile(runId, 'svg'),
+        this.removeRunFile(runId, 'json'),
+      ])
+    })
+  }
+
+  private async removeRunFile(runId: string, extension: string): Promise<void> {
+    try {
+      await unlink(join(this.root, 'history', `${runId}.${extension}`))
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
   }
 
   async getRun(runId: string): Promise<RunRecord> {

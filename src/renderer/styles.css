@@ -115,7 +115,8 @@
   .app-message.error { border-color: var(--ink); }
   .app-message button { padding: 2px; border: 0; background: transparent; }
   .run-panel { min-inline-size: 0; }
-  .run-panel-header { justify-content: space-between; min-block-size: 52px; padding: 0 2px 11px; }
+  .run-panel-title { min-inline-size: 0; }
+  .run-panel-header { justify-content: space-between; gap: 8px; min-block-size: 52px; padding: 0 2px 11px; }
   .run-panel-header h2 { margin-block-start: 4px; overflow: hidden; font-family: var(--font-display); font-size: 20px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
   .canvas-frame { display: grid; place-items: center; aspect-ratio: 1.35 / 1; min-block-size: 320px; max-block-size: 520px; border: 1px solid var(--line-strong); background: var(--surface); box-shadow: 3px 3px 0 rgba(23, 23, 22, .07); }
   .canvas-frame .svg-image { inline-size: 100%; block-size: 100%; padding: 22px; object-fit: contain; }
@@ -161,6 +162,22 @@
   .loading-cover p { color: var(--muted); font-family: var(--font-mono); font-size: 10px; }
 }
 
+@layer components {
+  .panel-actions { display: flex; flex: none; align-items: center; gap: 4px; }
+  .delete-confirm { border-color: var(--ink); background: var(--ink); color: var(--surface); }
+  .history-prompt { display: -webkit-box; overflow: hidden; color: var(--muted); font-size: 10px; line-height: 1.35; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+  .view-controls { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-block-end: 12px; }
+  .view-controls .eyebrow { margin-inline-end: 4px; }
+  .view-controls .icon-button { min-inline-size: 30px; min-block-size: 30px; border-color: var(--line); font-family: var(--font-mono); font-size: 17px; }
+  .zoom-value { min-inline-size: 48px; color: var(--muted); font-family: var(--font-mono); font-size: 10px; text-align: center; font-variant-numeric: tabular-nums; }
+  .fit-button { min-block-size: 30px; padding: 4px 10px; font-family: var(--font-mono); font-size: 9px; }
+  .canvas-frame:not(.empty) { display: flex; overflow: auto; overscroll-behavior: contain; }
+  .svg-zoom-layer { flex: none; margin: auto; transition: inline-size .18s var(--ease), block-size .18s var(--ease); }
+  .canvas-frame .svg-image { inline-size: 100%; block-size: 100%; }
+  .history-toggle, .history-close, .history-backdrop { display: none; }
+  .copy-status { display: block; padding: 10px 22px; color: var(--muted); font-family: var(--font-mono); font-size: 10px; }
+}
+
 @layer states {
   @media (prefers-reduced-motion: no-preference) {
     dialog[open] { animation: dialog-in .25s var(--ease); }
@@ -168,6 +185,9 @@
     .generate-button:hover svg { transform: rotate(12deg) scale(1.08); }
   }
   @keyframes dialog-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  @media (prefers-reduced-motion: reduce) {
+    .history-sidebar, .svg-zoom-layer { transition: none; }
+  }
 }
 
 @layer responsive {
@@ -192,8 +212,13 @@
     .workspace-footer { justify-content: center; }
   }
   @media (max-width: 900px) {
-    .app-body { grid-template-columns: 210px minmax(0, 1fr); }
+    .app-body { grid-template-columns: 1fr; }
     .brand-block h1 { font-size: 26px; }
+    .history-toggle { display: inline-flex; }
+    .history-sidebar { position: fixed; inset-block: 78px 0; inset-inline-start: 0; z-index: 31; inline-size: min(300px, 82vw); min-block-size: 0; border-inline-end: 1px solid var(--ink); background: var(--paper-deep); transform: translateX(-102%); transition: transform .22s var(--ease); }
+    .history-sidebar.drawer-open { transform: translateX(0); }
+    .history-backdrop { position: fixed; inset: 78px 0 0; z-index: 30; display: block; border: 0; background: rgba(21, 21, 21, .32); }
+    .history-close { display: inline-flex; }
   }
   @media (max-width: 720px) {
     .app-header { align-items: flex-start; }
@@ -203,7 +228,6 @@
     .model-selector select { max-inline-size: none; }
     .generate-button { min-inline-size: 112px; }
     .app-body { grid-template-columns: 1fr; }
-    .history-sidebar { display: none; }
     .settings-layout { grid-template-columns: 1fr; }
     .profile-list { border-inline-end: 0; border-block-end: 1px solid var(--line); }
   }

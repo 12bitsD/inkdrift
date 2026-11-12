@@ -1,6 +1,6 @@
 import { join, relative, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { app, BrowserWindow, ipcMain, net, protocol, session } from 'electron'
+import { app, BrowserWindow, clipboard, ipcMain, net, protocol, session } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
 import { z } from 'zod'
 import { generationInputSchema, profileInputSchema, promptSchema, runIdSchema } from '../shared/validation'
@@ -52,6 +52,11 @@ function registerIpc(): void {
     return Promise.resolve()
   })
   handle('run:get', (_event, input) => store.getRun(runIdSchema.parse(input)))
+  handle('run:copy', async (_event, input) => {
+    const run = await store.getRun(runIdSchema.parse(input))
+    await clipboard.writeText(run.rawResponse)
+  })
+  handle('run:delete', (_event, input) => store.deleteRun(runIdSchema.parse(input)))
   handle('baseline:get', (_event, input) => {
     const request = generationInputSchema.parse(input)
     return store.getBaseline(request.profileId, request.prompt)

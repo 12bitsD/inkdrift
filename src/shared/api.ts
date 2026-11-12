@@ -9,6 +9,8 @@ export type InkdriftApi = {
   generate: (profileId: string, prompt: string) => Promise<RunRecord>
   cancelGeneration: () => Promise<void>
   getRun: (runId: string) => Promise<RunRecord>
+  copyRun: (runId: string) => Promise<void>
+  deleteRun: (runId: string) => Promise<void>
   getBaseline: (profileId: string, prompt: string) => Promise<RunRecord | null>
   setBaseline: (runId: string) => Promise<void>
 }
