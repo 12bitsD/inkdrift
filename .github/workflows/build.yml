@@ -76,6 +76,11 @@ jobs:
           assert json.loads(result.stdout)['code'] == 'invalid-input', result.stdout
           print('x64 Nextloop worker starts and validates stdio input.')
           PY
+      - name: Build rpds for arm64
+        if: runner.os == 'macOS'
+        run: |
+          rustup target add aarch64-apple-darwin
+          CARGO_BUILD_TARGET=aarch64-apple-darwin MACOSX_DEPLOYMENT_TARGET=11.0 .venv/bin/python -m pip install --force-reinstall --no-binary rpds-py rpds-py==0.27.1
       - name: Package macOS arm64
         if: runner.os == 'macOS'
         run: |
