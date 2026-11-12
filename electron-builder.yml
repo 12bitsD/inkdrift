@@ -1,5 +1,6 @@
 appId: com.inkdrift.app
 productName: Inkdrift
+compression: maximum
 directories:
   output: release
 files:
