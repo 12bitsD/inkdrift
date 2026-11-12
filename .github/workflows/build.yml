@@ -115,7 +115,7 @@ jobs:
           print('Packaged Nextloop worker starts and validates stdio input.')
           PY
       - if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: inkdrift-${{ matrix.artifact }}
           path: |
