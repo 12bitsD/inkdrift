@@ -106,8 +106,8 @@ This builds the UI, creates a native PyInstaller worker, and runs electron-build
 
 The GitHub Actions workflow produces:
 
-- macOS x64: DMG and ZIP.
-- macOS arm64: DMG and ZIP.
+- macOS x64: ZIP.
+- macOS arm64: ZIP.
 - Windows x64: NSIS installer.
 
 Artifacts are unsigned development builds and are not notarized. Code signing, notarization, automatic updates, and public releases are outside the current scope.

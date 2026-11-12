@@ -60,12 +60,13 @@ jobs:
             .venv/bin/python -m ruff format --check worker
           fi
       - name: Package macOS x64
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && github.event_name != 'pull_request'
         run: |
-          pnpm build
-          pnpm build:worker
           pnpm exec electron-builder --x64 --publish never
           mv release release-x64
+      - name: Build worker for checks
+        if: runner.os == 'macOS'
+        run: pnpm build:worker
       - name: Smoke macOS x64 worker
         if: runner.os == 'macOS'
         run: |
@@ -77,18 +78,18 @@ jobs:
           print('x64 Nextloop worker starts and validates stdio input.')
           PY
       - name: Build rpds for arm64
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && github.event_name != 'pull_request'
         run: |
           rustup target add aarch64-apple-darwin
           CARGO_BUILD_TARGET=aarch64-apple-darwin MACOSX_DEPLOYMENT_TARGET=11.0 .venv/bin/python -m pip install --force-reinstall --no-binary rpds-py rpds-py==0.27.1
       - name: Package macOS arm64
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && github.event_name != 'pull_request'
         run: |
           INKDRIFT_WORKER_ARCH=arm64 pnpm build:worker
           pnpm exec electron-builder --arm64 --publish never
           mv release release-arm64
       - name: Verify macOS arm64 worker
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && github.event_name != 'pull_request'
         run: |
           python - <<'PY'
           import re, subprocess
@@ -99,10 +100,12 @@ jobs:
           assert re.search(r'Mach-O.*\barm64\b', output), output
           PY
       - name: Package Windows application
-        if: runner.os == 'Windows'
-        run: pnpm dist
+        if: runner.os == 'Windows' && github.event_name != 'pull_request'
+        run: |
+          pnpm build:worker
+          pnpm exec electron-builder --publish never
       - name: Smoke packaged worker
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && github.event_name != 'pull_request'
         run: |
           python - <<'PY'
           import json, subprocess
@@ -111,7 +114,8 @@ jobs:
           assert json.loads(result.stdout)['code'] == 'invalid-input', result.stdout
           print('Packaged Nextloop worker starts and validates stdio input.')
           PY
-      - uses: actions/upload-artifact@v4
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
         with:
           name: inkdrift-${{ matrix.artifact }}
           path: release*/**
