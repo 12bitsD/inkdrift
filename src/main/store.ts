@@ -3,13 +3,22 @@ import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { safeStorage } from 'electron'
 import { z } from 'zod'
-import { DEFAULT_PROMPT } from '../shared/types'
+import { DEFAULT_PROMPT, toRunMetadata } from '../shared/types'
 import type { AppState, ModelProfile, ProfileInput, RunMetadata, RunRecord, TokenUsage } from '../shared/types'
 
 const usageSchema = z.object({ inputTokens: z.number().int().nonnegative().nullable(), outputTokens: z.number().int().nonnegative().nullable() })
 const storedProfileSchema = z.object({
-  id: z.uuid(), name: z.string(), baseUrl: z.string(), modelId: z.string(),
-  timeoutMs: z.number().int(), maxOutputTokens: z.number().int(), encryptedKey: z.string(),
+  id: z.uuid(),
+  name: z.string(),
+  providerType: z.enum(['openai', 'anthropic']).default('openai'),
+  baseUrl: z.string(),
+  modelId: z.string(),
+  timeoutMs: z.number().int(),
+  maxOutputTokens: z.number().int(),
+  temperature: z.number().min(0).max(2).optional(),
+  topP: z.number().min(0).max(1).optional(),
+  topK: z.number().int().min(1).optional(),
+  encryptedKey: z.string(),
 })
 const settingsSchema = z.object({
   version: z.literal(1),
@@ -91,10 +100,14 @@ export class Store {
     return {
       id: profile.id,
       name: profile.name,
+      providerType: profile.providerType,
       baseUrl: profile.baseUrl,
       modelId: profile.modelId,
       timeoutMs: profile.timeoutMs,
       maxOutputTokens: profile.maxOutputTokens,
+      temperature: profile.temperature,
+      topP: profile.topP,
+      topK: profile.topK,
       hasApiKey: profile.encryptedKey.length > 0,
     }
   }
@@ -116,7 +129,10 @@ export class Store {
     return this.mutate(async () => {
       const settings = await this.settings()
       const existing = settings.profiles.find(profile => profile.id === input.id)
-      let encryptedKey = existing?.encryptedKey ?? ''
+      const forkSource = settings.profiles.find(
+        profile => profile.id === input.forkFromId,
+      )
+      let encryptedKey = existing?.encryptedKey ?? forkSource?.encryptedKey ?? ''
       if (input.apiKey?.trim()) {
         if (!await safeStorage.isAsyncEncryptionAvailable()) throw new Error('Secure credential storage is unavailable on this system')
         encryptedKey = (await safeStorage.encryptStringAsync(input.apiKey.trim())).toString('base64')
@@ -125,10 +141,14 @@ export class Store {
       const stored: StoredProfile = {
         id: input.id,
         name: input.name,
+        providerType: input.providerType,
         baseUrl: input.baseUrl,
         modelId: input.modelId,
         timeoutMs: input.timeoutMs,
         maxOutputTokens: input.maxOutputTokens,
+        temperature: input.temperature,
+        topP: input.topP,
+        topK: input.topK,
         encryptedKey,
       }
       const profiles = existing
@@ -190,9 +210,7 @@ export class Store {
           await writeFile(join(this.root, 'history', `${record.id}.svg`), record.svg, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
           written.push('svg')
         }
-        const metadata: Partial<RunRecord> = { ...record }
-        delete metadata.rawResponse
-        delete metadata.svg
+        const metadata = toRunMetadata(record)
         await this.writeJson(`history/${record.id}.json`, metadata)
         written.push('json')
         const index = await this.readJson('history/index.json', runIndexSchema, { version: 1, runs: [] })

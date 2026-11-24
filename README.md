@@ -65,10 +65,15 @@ Builds are currently unsigned and not notarized. Only download artifacts from th
 
 Open **Settings → Model profiles** and add:
 
-1. A display name.
-2. An OpenAI-compatible Base URL, such as `https://api.openai.com/v1`.
+1. A display name and provider type: **OpenAI-compatible** or **Anthropic**.
+2. A Base URL, such as `https://api.openai.com/v1` or `https://api.anthropic.com`.
 3. The exact model ID and provider API key.
-4. Timeout and maximum output tokens.
+4. Timeout and maximum output tokens (up to 1,000,000; the provider's own limits still apply).
+5. Optional **Temperature**, **Top P**, and **Top K** sampling values. Leave a field blank to use the provider default instead of sending it.
+
+Use **Fork profile** to duplicate an existing profile with a new ID, including its endpoint, sampling values, timeout, token budget, and encrypted API key. The key is never returned to the UI. Forking focuses the Model ID field so a variant can be saved with only a model change.
+
+OpenAI temperature ranges from 0–2; Anthropic temperature ranges from 0–1. Top K is native to Anthropic; for OpenAI-compatible services it is passed through only when set, and the service may not support it.
 
 HTTPS is required for remote providers. Loopback HTTP is available for local development. Prompts and responses go to the provider you configure; **local app** describes storage, not local inference.
 
@@ -81,6 +86,10 @@ Generate an SVG of Charmander riding a bicycle. Return only the SVG code, withou
 ```
 
 Generate once. When you get a useful reference frame, choose **Set as baseline**. Generate again later and compare.
+
+The left sidebar keeps one persistent entry per profile under **Models**. Select different profiles and start them **concurrently**; each profile has one active generation at a time, with independent cancellation and History writes. While a model is connecting, the Current panel shows a spinner and an elapsed-time / timeout-budget bar. The bar measures time, not model completion. The top action bar is sticky so Settings and Generate/Cancel stay available while scrolling.
+
+Every **History** record has its own delete action with confirmation. Opening a historical record compares it with the Baseline for that record's model and prompt without overwriting the brief currently being edited. Generating never replaces a Baseline automatically.
 
 <table>
   <tr>
@@ -107,8 +116,9 @@ React renderer · sandboxed, no Node integration
 Electron main
   ├─ safeStorage + local files
   └─ one Python worker per generation
-       └─ nextloop==1.0.0 · AgentLoop + OpenAIProvider
-            └─ OpenAI-compatible /chat/completions
+       └─ nextloop==1.1.0rc1 · AgentLoop + OpenAIProvider / AnthropicProvider
+            ├─ OpenAI-compatible /chat/completions
+            └─ Anthropic /v1/messages
 ```
 
 Each generation is one Nextloop turn with one model call, no tools, no automatic retries, and no persistent agent session. SVG output is bounded and sanitized to remove scripts, event handlers, external resources, navigation, XML doctypes/entities, and other active content.

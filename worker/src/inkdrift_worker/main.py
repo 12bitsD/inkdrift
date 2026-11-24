@@ -1,13 +1,14 @@
 import asyncio
 import ipaddress
 import json
+import math
 import os
 import sys
 from collections.abc import Mapping
 from typing import Any
 from urllib.parse import urlparse
 
-from nextloop import OpenAIProvider
+from nextloop import AnthropicProvider, ModelProvider, OpenAIProvider
 
 from .generation import generate_svg
 
@@ -23,6 +24,21 @@ def string(value: Any, *, nonempty: bool = False) -> str:
 def integer(value: Any, minimum: int, maximum: int) -> int:
     if type(value) is not int or not minimum <= value <= maximum:
         raise ValueError("invalid integer")
+    return value
+
+
+def number(value: Any, minimum: float, maximum: float) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("invalid number")
+    result = float(value)
+    if not math.isfinite(result) or not minimum <= result <= maximum:
+        raise ValueError("invalid number")
+    return result
+
+
+def positive_integer(value: Any) -> int:
+    if type(value) is not int or value < 1:
+        raise ValueError("invalid positive integer")
     return value
 
 
@@ -65,26 +81,53 @@ def read_request() -> Mapping[str, Any]:
     string(value["runId"], nonempty=True)
     string(value["system"], nonempty=True)
     string(value["prompt"], nonempty=True)
-    integer(value["maxOutputTokens"], 256, 64_000)
+    integer(value["maxOutputTokens"], 256, 1_000_000)
     integer(value["timeoutMs"], 1_000, 900_000)
     provider = value["provider"]
     if not isinstance(provider, dict):
         raise ValueError("invalid provider")
+    provider_type = provider.get("type", "openai")
+    if provider_type not in {"openai", "anthropic"}:
+        raise ValueError("invalid provider type")
+    provider["type"] = provider_type
     string(provider["modelId"], nonempty=True)
     provider["baseUrl"] = base_url(provider["baseUrl"])
+    if "temperature" in value:
+        value["temperature"] = number(
+            value["temperature"], 0, 1 if provider_type == "anthropic" else 2
+        )
+    if "topP" in value:
+        value["topP"] = number(value["topP"], 0, 1)
+    if "topK" in value:
+        value["topK"] = positive_integer(value["topK"])
     return value
 
 
-def provider(request: Mapping[str, Any]) -> OpenAIProvider:
+def provider(request: Mapping[str, Any]) -> ModelProvider:
     api_key = os.environ.get("INKDRIFT_API_KEY", "").strip()
     if not api_key:
         raise ValueError("missing provider credential")
     config = request["provider"]
-    return OpenAIProvider(
+    default_parameters: dict[str, Any] = {
+        "max_tokens": integer(request["maxOutputTokens"], 256, 1_000_000)
+    }
+    for request_key, parameter_key in (
+        ("temperature", "temperature"),
+        ("topP", "top_p"),
+        ("topK", "top_k"),
+    ):
+        if request_key in request:
+            default_parameters[parameter_key] = request[request_key]
+    provider_class: type[OpenAIProvider] | type[AnthropicProvider]
+    if config.get("type", "openai") == "anthropic":
+        provider_class = AnthropicProvider
+    else:
+        provider_class = OpenAIProvider
+    return provider_class(
         model_id=str(config["modelId"]),
         base_url=str(config["baseUrl"]),
         api_key=api_key,
-        default_parameters={"max_tokens": integer(request["maxOutputTokens"], 256, 64_000)},
+        default_parameters=default_parameters,
         timeout_seconds=integer(request["timeoutMs"], 1_000, 900_000) / 1000,
     )
 

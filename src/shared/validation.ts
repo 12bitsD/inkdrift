@@ -28,11 +28,28 @@ export const baseUrlSchema = z.string().trim().min(1).max(2_048).transform(safeB
 export const profileInputSchema = z.object({
   id: z.uuid(),
   name: z.string().trim().min(1, 'Profile name is required').max(80),
+  providerType: z.enum(['openai', 'anthropic']).default('openai'),
   baseUrl: baseUrlSchema,
   modelId: z.string().trim().min(1, 'Model ID is required').max(160),
   timeoutMs: z.number().int().min(1_000).max(900_000),
-  maxOutputTokens: z.number().int().min(256).max(64_000),
+  maxOutputTokens: z.number().int().min(256).max(1_000_000),
+  temperature: z.number().min(0).max(2).optional(),
+  topP: z.number().min(0).max(1).optional(),
+  topK: z.number().int().min(1).optional(),
   apiKey: z.string().max(4_096).optional(),
+  forkFromId: z.uuid().optional(),
+}).superRefine((input, context) => {
+  if (
+    input.providerType === 'anthropic'
+    && input.temperature !== undefined
+    && input.temperature > 1
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['temperature'],
+      message: 'Anthropic temperature must be between 0 and 1',
+    })
+  }
 })
 
 export const generationInputSchema = z.object({

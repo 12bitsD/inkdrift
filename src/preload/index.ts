@@ -9,7 +9,9 @@ const api: InkdriftApi = {
   setActiveProfile: profileId => ipcRenderer.invoke('profile:activate', profileId),
   setPrompt: prompt => ipcRenderer.invoke('prompt:set', prompt),
   generate: (profileId, prompt) => ipcRenderer.invoke('generation:run', { profileId, prompt }),
-  cancelGeneration: () => ipcRenderer.invoke('generation:cancel'),
+  cancelGeneration: profileId => (
+    ipcRenderer.invoke('generation:cancel', profileId)
+  ),
   getRun: runId => ipcRenderer.invoke('run:get', runId),
   getRunSvg: runId => ipcRenderer.invoke('run:svg', runId),
   copyRun: runId => ipcRenderer.invoke('run:copy', runId),

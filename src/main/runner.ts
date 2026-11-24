@@ -5,34 +5,92 @@ import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { app } from 'electron'
 import { SYSTEM_PROMPT } from '../shared/types'
-import type { ModelProfile, RunErrorCode, RunRecord, TokenUsage } from '../shared/types'
+import type {
+  ModelProfile,
+  RunErrorCode,
+  RunRecord,
+  TokenUsage,
+} from '../shared/types'
 import { workerResponseSchema } from '../shared/worker'
 import type { Store } from './store'
 
 const EMPTY_USAGE: TokenUsage = { inputTokens: null, outputTokens: null }
-type ActiveRun = { child: ChildProcessWithoutNullStreams | null; cancelled: boolean }
-type RunOutcome = Pick<RunRecord, 'status' | 'errorCode' | 'errorMessage' | 'rawResponse' | 'svg' | 'finishReason' | 'usage' | 'hasSvg'>
+type ActiveRun = {
+  child: ChildProcessWithoutNullStreams | null
+  cancelled: boolean
+}
+type RunOutcome = Pick<
+  RunRecord,
+  'status' | 'errorCode' | 'errorMessage' | 'rawResponse' | 'svg'
+  | 'finishReason' | 'usage' | 'hasSvg'
+>
+type CloseResult = { code: number | null; spawnError: boolean }
+type WorkerCommand = {
+  command: string
+  args: string[]
+  pythonPath?: string
+}
 
-function workerCommand(): { command: string; args: string[]; pythonPath?: string } {
+function workerCommand(): WorkerCommand {
   if (app.isPackaged) {
-    return { command: join(process.resourcesPath, 'worker', 'inkdrift-worker', process.platform === 'win32' ? 'inkdrift-worker.exe' : 'inkdrift-worker'), args: [] }
+    const executable = process.platform === 'win32'
+      ? 'inkdrift-worker.exe'
+      : 'inkdrift-worker'
+    return {
+      command: join(
+        process.resourcesPath,
+        'worker',
+        'inkdrift-worker',
+        executable,
+      ),
+      args: [],
+    }
   }
   const root = app.getAppPath()
-  const command = process.env.INKDRIFT_PYTHON ?? resolve(root, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python')
-  return { command, args: ['-m', 'inkdrift_worker'], pythonPath: resolve(root, 'worker/src') }
+  const command = process.env.INKDRIFT_PYTHON ?? resolve(
+    root,
+    '.venv',
+    process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python',
+  )
+  return {
+    command,
+    args: ['-m', 'inkdrift_worker'],
+    pythonPath: resolve(root, 'worker/src'),
+  }
+}
+
+function workerPayload(profile: ModelProfile, runId: string, prompt: string) {
+  return {
+    version: 1,
+    runId,
+    system: SYSTEM_PROMPT,
+    prompt,
+    provider: {
+      type: profile.providerType,
+      modelId: profile.modelId,
+      baseUrl: profile.baseUrl,
+    },
+    maxOutputTokens: profile.maxOutputTokens,
+    timeoutMs: profile.timeoutMs,
+    temperature: profile.temperature,
+    topP: profile.topP,
+    topK: profile.topK,
+  }
 }
 
 export class Runner {
-  private active: ActiveRun | null = null
+  private active = new Map<string, ActiveRun>()
 
-  get isRunning(): boolean {
-    return this.active !== null
+  isRunning(profileId?: string): boolean {
+    return profileId ? this.active.has(profileId) : this.active.size > 0
   }
 
   async generate(store: Store, profileId: string, prompt: string): Promise<RunRecord> {
-    if (this.active) throw new Error('A generation is already running')
+    if (this.active.has(profileId)) {
+      throw new Error('A generation is already running for this profile')
+    }
     const active: ActiveRun = { child: null, cancelled: false }
-    this.active = active
+    this.active.set(profileId, active)
     const startedAt = Date.now()
     try {
       const { profile, apiKey } = await store.credentials(profileId)
@@ -49,27 +107,55 @@ export class Runner {
         finishReason: null,
         hasSvg: false,
       })
-      if (active.cancelled) return { ...base, ...this.failure('cancelled', 'Generation cancelled', 'cancelled'), durationMs: Date.now() - startedAt }
+      if (active.cancelled) {
+        return {
+          ...base,
+          ...this.failure('cancelled', 'Generation cancelled', 'cancelled'),
+          durationMs: Date.now() - startedAt,
+        }
+      }
       const result = await this.execute(profile, apiKey, runId, prompt, active)
       return { ...base, ...result, durationMs: Date.now() - startedAt }
     } finally {
-      this.active = null
+      if (this.active.get(profileId) === active) {
+        this.active.delete(profileId)
+      }
     }
   }
 
-  cancel(): void {
-    if (!this.active) return
-    this.active.cancelled = true
-    this.active.child?.kill('SIGTERM')
+  cancel(profileId?: string): void {
+    const activeRuns = profileId
+      ? [this.active.get(profileId)]
+      : [...this.active.values()]
+    for (const active of activeRuns) {
+      if (!active) {
+        continue
+      }
+      active.cancelled = true
+      active.child?.kill('SIGTERM')
+    }
   }
 
-  private async execute(profile: ModelProfile, apiKey: string, runId: string, prompt: string, active: ActiveRun): Promise<RunOutcome> {
+  private async execute(
+    profile: ModelProfile,
+    apiKey: string,
+    runId: string,
+    prompt: string,
+    active: ActiveRun,
+  ): Promise<RunOutcome> {
     const { command, args, pythonPath } = workerCommand()
-    if (!existsSync(command)) return this.failure('worker-error', 'The Nextloop worker is missing. Reinstall or rebuild the application.')
+    if (!existsSync(command)) {
+      return this.failure(
+        'worker-error',
+        'The Nextloop worker is missing. Reinstall or rebuild the application.',
+      )
+    }
     const child = spawn(command, args, {
       env: {
         PATH: process.env.PATH ?? '',
-        ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),
+        ...(process.env.SystemRoot
+          ? { SystemRoot: process.env.SystemRoot }
+          : {}),
         ...(process.env.TEMP ? { TEMP: process.env.TEMP } : {}),
         ...(process.env.TMP ? { TMP: process.env.TMP } : {}),
         ...(pythonPath ? { PYTHONPATH: pythonPath } : {}),
@@ -88,7 +174,9 @@ export class Runner {
     let stdout = ''
     child.stdout.setEncoding('utf8')
     child.stdout.on('data', (chunk: string) => {
-      if (flags.oversized) return
+      if (flags.oversized) {
+        return
+      }
       stdout += chunk
       if (Buffer.byteLength(stdout) > 8 * 1024 * 1024) {
         flags.oversized = true
@@ -97,28 +185,40 @@ export class Runner {
     })
     child.stderr.resume()
     child.stdin.on('error', () => {})
-    const close = new Promise<{ code: number | null; spawnError: boolean }>(resolveClose => {
+    const close = new Promise<CloseResult>(resolveClose => {
       child.once('error', () => resolveClose({ code: null, spawnError: true }))
       child.once('close', code => resolveClose({ code, spawnError: false }))
     })
-    child.stdin.end(JSON.stringify({
-      version: 1,
-      runId,
-      system: SYSTEM_PROMPT,
-      prompt,
-      provider: { modelId: profile.modelId, baseUrl: profile.baseUrl },
-      maxOutputTokens: profile.maxOutputTokens,
-      timeoutMs: profile.timeoutMs,
-    }))
+    child.stdin.end(JSON.stringify(workerPayload(profile, runId, prompt)))
     const result = await close
     clearTimeout(timer)
-    if (active.cancelled) return this.failure('cancelled', 'Generation cancelled', 'cancelled')
-    if (flags.timedOut) return this.failure('timeout', 'The generation timed out')
-    if (flags.oversized) return this.failure('worker-error', 'The worker response was too large')
-    if (result.spawnError) return this.failure('worker-error', 'The Nextloop worker could not be started')
+    if (active.cancelled) {
+      return this.failure('cancelled', 'Generation cancelled', 'cancelled')
+    }
+    if (flags.timedOut) {
+      return this.failure('timeout', 'The generation timed out')
+    }
+    if (flags.oversized) {
+      return this.failure('worker-error', 'The worker response was too large')
+    }
+    if (result.spawnError) {
+      return this.failure(
+        'worker-error',
+        'The Nextloop worker could not be started',
+      )
+    }
+    return this.readResult(stdout, result)
+  }
+
+  private readResult(stdout: string, result: CloseResult): RunOutcome {
     try {
       const response = workerResponseSchema.parse(JSON.parse(stdout))
-      if (result.code !== 0 && response.kind === 'succeeded') return this.failure('worker-error', 'The worker returned an inconsistent result')
+      if (result.code !== 0 && response.kind === 'succeeded') {
+        return this.failure(
+          'worker-error',
+          'The worker returned an inconsistent result',
+        )
+      }
       if (response.kind === 'succeeded') {
         return {
           status: 'succeeded',
@@ -136,11 +236,21 @@ export class Runner {
         usage: response.usage ?? EMPTY_USAGE,
       }
     } catch {
-      return { ...this.failure('worker-error', 'The Nextloop worker returned an unreadable result'), rawResponse: stdout }
+      return {
+        ...this.failure(
+          'worker-error',
+          'The Nextloop worker returned an unreadable result',
+        ),
+        rawResponse: stdout,
+      }
     }
   }
 
-  private failure(code: RunErrorCode, message: string, status: 'failed' | 'cancelled' = 'failed'): RunOutcome {
+  private failure(
+    code: RunErrorCode,
+    message: string,
+    status: 'failed' | 'cancelled' = 'failed',
+  ): RunOutcome {
     return {
       status,
       errorCode: code,

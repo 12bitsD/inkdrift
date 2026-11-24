@@ -1,94 +1,54 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { DEFAULT_PROMPT } from '../shared/types'
-import type { ModelProfile, ProfileInput, RunMetadata, RunRecord } from '../shared/types'
+import { DEFAULT_PROMPT, toRunMetadata } from '../shared/types'
+import type {
+  ModelProfile,
+  ProfileInput,
+  RunMetadata,
+  RunRecord,
+} from '../shared/types'
+import { AppHeader } from './components/AppHeader'
 import { CodeDialog } from './components/CodeDialog'
 import { EmptyArt } from './components/EmptyArt'
-import { Icon } from './components/Icon'
 import { SettingsDialog } from './components/SettingsDialog'
-import { SvgImage } from './components/SvgImage'
+import { Sidebar } from './components/Sidebar'
+import { Workspace } from './components/Workspace'
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
+import type { ActiveGeneration } from './types'
 
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
+type GenerationStartOptions = {
+  profile?: ModelProfile
+  activeGenerations: Record<string, ActiveGeneration>
+  guard: Set<string>
+  prompt: string
+  deleting: boolean
 }
 
-function formatDuration(milliseconds: number): string {
-  return milliseconds < 1000 ? `${String(milliseconds)} ms` : `${(milliseconds / 1000).toFixed(1)} s`
+function canStartGeneration({
+  profile,
+  activeGenerations,
+  guard,
+  prompt,
+  deleting,
+}: GenerationStartOptions): boolean {
+  if (!profile || !prompt.trim() || deleting) {
+    return false
+  }
+  return !activeGenerations[profile.id] && !guard.has(profile.id)
 }
 
-function metadata(record: RunRecord): RunMetadata {
-  const value: Partial<RunRecord> = { ...record }
-  delete value.rawResponse
-  delete value.svg
-  return value as RunMetadata
-}
-
-function downloadSvg(record: RunRecord): void {
-  if (!record.svg) return
-  const url = URL.createObjectURL(new Blob([record.svg], { type: 'image/svg+xml;charset=utf-8' }))
-  const link = document.createElement('a')
-  link.href = url
-  link.download = `inkdrift-${record.id}.svg`
-  link.click()
-  window.setTimeout(() => URL.revokeObjectURL(url), 1_000)
-}
-
-function HistoryEntry({ run, selected, onSelect }: { run: RunMetadata; selected: boolean; onSelect: () => void }) {
-  const [svg, setSvg] = useState<string | null>(null)
-  useEffect(() => {
-    let active = true
-    if (run.hasSvg) window.inkdrift.getRunSvg(run.id).then(value => { if (active) setSvg(value) }).catch(() => {})
-    return () => { active = false }
-  }, [run.id, run.hasSvg])
-  return (
-    <li>
-      <button type="button" className={selected ? 'history-entry selected' : 'history-entry'} onClick={onSelect} aria-current={selected ? 'true' : undefined}>
-        <span className={svg ? 'history-thumb' : 'history-thumb empty'}>
-          {svg ? <SvgImage svg={svg} alt="" /> : <Icon name={run.status === 'succeeded' ? 'history' : 'close'} size={20} />}
-        </span>
-        <span className="history-copy"><strong>{run.profileName}</strong><small className="history-prompt">{run.prompt}</small><small className="history-meta">{run.modelId} · {formatDate(run.createdAt)}</small></span>
-        <span className={run.status === 'succeeded' ? 'run-mark success' : 'run-mark'} aria-label={run.status} />
-      </button>
-    </li>
-  )
-}
-
-function RunPanel({ title, record, emptyTitle, emptyDescription, emptyProfileName, onCode, action, zoom, onDelete, deletePending, deleting }: {
-  title: string
-  record: RunRecord | null
-  emptyTitle: string
-  emptyDescription: string
-  emptyProfileName?: string
-  onCode: (run: RunRecord) => void
-  action?: React.ReactNode
-  zoom: number
-  onDelete?: (run: RunRecord) => Promise<void>
-  deletePending?: boolean
-  deleting?: boolean
-}) {
-  return (
-    <section className="run-panel" aria-labelledby={`${title.toLowerCase()}-heading`}>
-      <header className="run-panel-header">
-        <div className="run-panel-title"><p className="eyebrow">{title}</p><h2 id={`${title.toLowerCase()}-heading`}>{record?.profileName ?? emptyProfileName ?? 'No selection'}</h2></div>
-        <div className="panel-actions">
-          {record?.svg && <button className="icon-button" type="button" aria-label={`Download ${title.toLowerCase()} SVG`} title="Download SVG" onClick={() => downloadSvg(record)}><Icon name="download" /></button>}
-          {record && <button className="icon-button labelled" type="button" onClick={() => onCode(record)}><Icon name="code" /><span>Raw</span></button>}
-          {onDelete && record && <button className={deletePending ? 'icon-button labelled delete-confirm' : 'icon-button'} type="button" aria-label={deletePending ? 'Confirm delete current run' : 'Delete current run'} disabled={deleting} onClick={() => { void onDelete(record) }}><Icon name="trash" />{deletePending && <span>{deleting ? 'Deleting…' : 'Confirm'}</span>}</button>}
-        </div>
-      </header>
-      <div className={record?.svg ? 'canvas-frame' : 'canvas-frame empty'}>
-        {record?.svg ? <div className="svg-zoom-layer" style={{ inlineSize: `${String(zoom)}%`, blockSize: `${String(zoom)}%` }}><SvgImage svg={record.svg} alt={`${title} SVG generated by ${record.profileName}`} eager /></div> : <>
-          <EmptyArt variant={title === 'BASELINE' ? 'layers' : 'bike'} />
-          <div className="empty-copy"><h3>{record?.status === 'failed' ? 'The request did not produce an SVG' : emptyTitle}</h3><p>{record?.errorMessage ?? emptyDescription}</p></div>
-        </>}
-      </div>
-      <footer className="run-panel-footer">
-        {record ? <>
-          <div className="run-technical"><span>{record.modelId}</span><span>{formatDate(record.createdAt)}</span><span>{formatDuration(record.durationMs)}</span></div>
-          {action}
-        </> : <span className="technical-placeholder">SVG ONLY · NO SCORE</span>}
-      </footer>
-    </section>
-  )
+function viewedGeneration(
+  pending: ActiveGeneration | undefined,
+  current: RunRecord | null,
+  activeGenerations: Record<string, ActiveGeneration>,
+  activeGeneration?: ActiveGeneration,
+): ActiveGeneration | undefined {
+  if (pending) {
+    return pending
+  }
+  if (current && activeGenerations[current.profileId]) {
+    return activeGenerations[current.profileId]
+  }
+  return activeGeneration
 }
 
 export function App() {
@@ -97,71 +57,119 @@ export function App() {
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT)
   const [runs, setRuns] = useState<RunMetadata[]>([])
   const [current, setCurrent] = useState<RunRecord | null>(null)
-  const [baseline, setBaseline] = useState<RunRecord | null>(null)
+  const [baselineResult, setBaselineResult] = useState<{
+    key: string
+    record: RunRecord | null
+  }>({ key: '', record: null })
+  const [activeGenerations, setActiveGenerations] = useState<
+    Record<string, ActiveGeneration>
+  >({})
+  const [pendingGenerationId, setPendingGenerationId] = useState<
+    string | null
+  >(null)
   const [historyFilter, setHistoryFilter] = useState('all')
   const [historyLimit, setHistoryLimit] = useState(50)
   const [loading, setLoading] = useState(true)
-  const [generating, setGenerating] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [codeRun, setCodeRun] = useState<RunRecord | null>(null)
   const [pendingDelete, setPendingDelete] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
-  const [compactHistory, setCompactHistory] = useState(() => window.matchMedia('(max-width: 900px)').matches)
+  const [compactHistory, setCompactHistory] = useState(
+    () => window.matchMedia('(max-width: 900px)').matches,
+  )
   const [zoom, setZoom] = useState(100)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const baselineRequest = useRef(0)
+  const pendingGenerationRef = useRef<string | null>(null)
+  const generationGuard = useRef(new Set<string>())
+  const selectionRequest = useRef(0)
   const historyTrigger = useRef<HTMLButtonElement>(null)
   const historyClose = useRef<HTMLButtonElement>(null)
   const historyWasOpen = useRef(false)
 
+  const showGeneration = useCallback((generationId: string | null) => {
+    pendingGenerationRef.current = generationId
+    setPendingGenerationId(generationId)
+  }, [])
+
   useEffect(() => {
     let mounted = true
     window.inkdrift.getState().then(async state => {
-      if (!mounted) return
+      if (!mounted) {
+        return
+      }
       setProfiles(state.profiles)
       setActiveProfileId(state.activeProfileId)
       setPrompt(state.prompt)
       setRuns(state.runs)
-      const latest = state.runs.find(run => run.status === 'succeeded') ?? state.runs[0]
-      if (latest) setCurrent(await window.inkdrift.getRun(latest.id))
-    }).catch((cause: unknown) => { if (mounted) setError(cause instanceof Error ? cause.message : 'Could not load local data') }).finally(() => { if (mounted) setLoading(false) })
+      const latest = state.runs.find(run => run.status === 'succeeded')
+        ?? state.runs[0]
+      if (latest) {
+        setCurrent(await window.inkdrift.getRun(latest.id))
+      }
+    }).catch((cause: unknown) => {
+      if (mounted) {
+        setError(cause instanceof Error ? cause.message : 'Could not load local data')
+      }
+    }).finally(() => {
+      if (mounted) {
+        setLoading(false)
+      }
+    })
     return () => { mounted = false }
   }, [])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      if (prompt.trim()) window.inkdrift.setPrompt(prompt.trim()).catch(() => {})
+      if (prompt.trim()) {
+        window.inkdrift.setPrompt(prompt.trim()).catch(() => {})
+      }
     }, 600)
     return () => window.clearTimeout(timer)
   }, [prompt])
 
   useEffect(() => {
     const flushPrompt = () => {
-      if (prompt.trim()) void window.inkdrift.setPrompt(prompt.trim()).catch(() => {})
+      if (prompt.trim()) {
+        void window.inkdrift.setPrompt(prompt.trim()).catch(() => {})
+      }
     }
     window.addEventListener('beforeunload', flushPrompt)
     return () => window.removeEventListener('beforeunload', flushPrompt)
   }, [prompt])
 
+  const comparisonProfileId = current?.profileId ?? activeProfileId
+  const comparisonPrompt = (current?.prompt ?? prompt).trim()
+  const comparisonKey = `${comparisonProfileId ?? ''}\n${comparisonPrompt}`
+  const baseline = baselineResult.key === comparisonKey
+    ? baselineResult.record
+    : null
+
   useEffect(() => {
     const request = ++baselineRequest.current
+    if (!comparisonProfileId || !comparisonPrompt) {
+      return
+    }
     const timer = window.setTimeout(() => {
-      setBaseline(null)
-      if (!activeProfileId || !prompt.trim()) return
-      window.inkdrift.getBaseline(activeProfileId, prompt.trim()).then(value => {
-        if (request === baselineRequest.current) setBaseline(value)
-      }).catch(() => {})
+      window.inkdrift.getBaseline(comparisonProfileId, comparisonPrompt)
+        .then(value => {
+          if (request === baselineRequest.current) {
+            setBaselineResult({ key: comparisonKey, record: value })
+          }
+        }).catch(() => {})
     }, 250)
     return () => window.clearTimeout(timer)
-  }, [activeProfileId, prompt])
+  }, [comparisonProfileId, comparisonPrompt, comparisonKey])
 
   useEffect(() => {
     const query = window.matchMedia('(max-width: 900px)')
     const update = () => {
       setCompactHistory(query.matches)
-      if (!query.matches) setHistoryOpen(false)
+      if (!query.matches) {
+        setHistoryOpen(false)
+      }
     }
     query.addEventListener('change', update)
     window.addEventListener('resize', update)
@@ -172,26 +180,59 @@ export function App() {
   }, [])
 
   useEffect(() => {
-    if (compactHistory && historyOpen) historyClose.current?.focus({ preventScroll: true })
-    else if (compactHistory && historyWasOpen.current) historyTrigger.current?.focus({ preventScroll: true })
+    if (compactHistory && historyOpen) {
+      historyClose.current?.focus({ preventScroll: true })
+    } else if (compactHistory && historyWasOpen.current) {
+      historyTrigger.current?.focus({ preventScroll: true })
+    }
     historyWasOpen.current = historyOpen
   }, [compactHistory, historyOpen])
 
   useEffect(() => {
-    if (!pendingDelete) return
+    if (!pendingDelete) {
+      return
+    }
     const timer = window.setTimeout(() => setPendingDelete(null), 5_000)
     return () => window.clearTimeout(timer)
   }, [pendingDelete])
 
-  const filteredRuns = useMemo(() => historyFilter === 'all' ? runs : runs.filter(run => run.profileId === historyFilter), [historyFilter, runs])
-  const visibleRuns = useMemo(() => filteredRuns.slice(0, historyLimit), [filteredRuns, historyLimit])
+  const filteredRuns = useMemo(
+    () => historyFilter === 'all'
+      ? runs
+      : runs.filter(run => run.profileId === historyFilter),
+    [historyFilter, runs],
+  )
+  const visibleRuns = useMemo(
+    () => filteredRuns.slice(0, historyLimit),
+    [filteredRuns, historyLimit],
+  )
+  const activeProfile = profiles.find(profile => profile.id === activeProfileId)
+  const activeGeneration = activeProfileId
+    ? activeGenerations[activeProfileId]
+    : undefined
+  const pendingGeneration = Object.values(activeGenerations)
+    .find(run => run.id === pendingGenerationId)
+  const cancelableGeneration = viewedGeneration(
+    pendingGeneration,
+    current,
+    activeGenerations,
+    activeGeneration,
+  )
 
   const selectProfile = async (profileId: string) => {
-    if (deleting) return
+    if (deleting) {
+      return
+    }
+    selectionRequest.current += 1
     setPendingDelete(null)
     setActiveProfileId(profileId)
+    setCurrent(null)
+    showGeneration(activeGenerations[profileId]?.id ?? null)
     setError('')
-    await window.inkdrift.setActiveProfile(profileId).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : 'Could not select profile'))
+    await window.inkdrift.setActiveProfile(profileId)
+      .catch((cause: unknown) => {
+        setError(cause instanceof Error ? cause.message : 'Could not select profile')
+      })
   }
 
   const closeHistory = useCallback(() => {
@@ -199,78 +240,182 @@ export function App() {
   }, [])
 
   const selectRun = useCallback(async (runId: string) => {
-    if (deleting) return
+    if (deleting) {
+      return
+    }
+    const request = ++selectionRequest.current
     setError('')
     setPendingDelete(null)
+    showGeneration(null)
     closeHistory()
-    try { setCurrent(await window.inkdrift.getRun(runId)) } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not open run') }
-  }, [closeHistory, deleting])
+    try {
+      const record = await window.inkdrift.getRun(runId)
+      if (request === selectionRequest.current) {
+        setCurrent(record)
+      }
+    } catch (cause) {
+      if (request === selectionRequest.current) {
+        setError(cause instanceof Error ? cause.message : 'Could not open run')
+      }
+    }
+  }, [closeHistory, deleting, showGeneration])
 
   const generate = useCallback(async () => {
-    if (!activeProfileId || !prompt.trim() || generating || deleting) return
-    setGenerating(true)
+    if (!canStartGeneration({
+      profile: activeProfile,
+      activeGenerations,
+      guard: generationGuard.current,
+      prompt,
+      deleting,
+    })) {
+      return
+    }
+    selectionRequest.current += 1
+    const cleanPrompt = prompt.trim()
+    generationGuard.current.add(activeProfile!.id)
+    const generation: ActiveGeneration = {
+      id: crypto.randomUUID(),
+      profileId: activeProfile!.id,
+      profileName: activeProfile!.name,
+      modelId: activeProfile!.modelId,
+      prompt: cleanPrompt,
+      startedAt: Date.now(),
+      timeoutMs: activeProfile!.timeoutMs,
+    }
+    setActiveGenerations(previous => ({
+      ...previous,
+      [generation.profileId]: generation,
+    }))
+    if (current === null || current.profileId === activeProfile!.id) {
+      showGeneration(generation.id)
+      setCurrent(null)
+    } else {
+      showGeneration(null)
+    }
+    setPrompt(cleanPrompt)
     setError('')
     setNotice('')
     setPendingDelete(null)
     setHistoryFilter('all')
     setHistoryLimit(50)
     try {
-      const cleanPrompt = prompt.trim()
-      setPrompt(cleanPrompt)
-      const record = await window.inkdrift.generate(activeProfileId, cleanPrompt)
-      setRuns(previous => [metadata(record), ...previous.filter(run => run.id !== record.id)])
-      setCurrent(record)
-      if (record.status === 'succeeded') setNotice('New frame added to history. Your baseline is unchanged.')
+      const record = await window.inkdrift.generate(
+        generation.profileId,
+        generation.prompt,
+      )
+      setRuns(previous => [
+        toRunMetadata(record),
+        ...previous.filter(run => run.id !== record.id),
+      ])
+      if (pendingGenerationRef.current === generation.id) {
+        setCurrent(record)
+        showGeneration(null)
+      }
+      if (record.status === 'succeeded') {
+        setNotice(
+          `${generation.profileName}: new frame added to history. Your baseline is unchanged.`,
+        )
+      }
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Generation failed')
+      if (pendingGenerationRef.current === generation.id) {
+        showGeneration(null)
+      }
+      setError(
+        `${generation.profileName}: ${cause instanceof Error ? cause.message : 'Generation failed'}`,
+      )
     } finally {
-      setGenerating(false)
+      generationGuard.current.delete(generation.profileId)
+      setActiveGenerations(previous => Object.fromEntries(
+        Object.entries(previous).filter(
+          ([profileId]) => profileId !== generation.profileId,
+        ),
+      ))
     }
-  }, [activeProfileId, deleting, generating, prompt])
+  }, [
+    activeGenerations,
+    activeProfile,
+    current,
+    deleting,
+    prompt,
+    showGeneration,
+  ])
 
   const saveProfile = async (input: ProfileInput) => {
+    selectionRequest.current += 1
     const saved = await window.inkdrift.saveProfile(input)
     setProfiles(saved)
     setActiveProfileId(input.id)
+    setCurrent(null)
+    showGeneration(activeGenerations[input.id]?.id ?? null)
     await window.inkdrift.setActiveProfile(input.id)
   }
 
   const deleteProfile = async (profileId: string) => {
     const remaining = await window.inkdrift.deleteProfile(profileId)
     setProfiles(remaining)
-    if (activeProfileId === profileId) setActiveProfileId(null)
+    if (activeProfileId === profileId) {
+      selectionRequest.current += 1
+      setActiveProfileId(null)
+      setCurrent(null)
+      showGeneration(null)
+    }
   }
 
   const setAsBaseline = useCallback(async () => {
-    if (!current || current.status !== 'succeeded' || deleting || current.profileId !== activeProfileId || current.prompt !== prompt.trim()) return
+    if (
+      !current
+      || current.status !== 'succeeded'
+      || deleting
+      || pendingGeneration
+    ) {
+      return
+    }
     setError('')
     try {
       await window.inkdrift.setBaseline(current.id)
-      setBaseline(current)
+      setBaselineResult({ key: comparisonKey, record: current })
       setNotice('Baseline updated for this model and prompt.')
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not set baseline') }
-  }, [activeProfileId, current, deleting, prompt])
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : 'Could not set baseline',
+      )
+    }
+  }, [comparisonKey, current, deleting, pendingGeneration])
 
-  const deleteRun = async () => {
-    if (!current || deleting) return
-    if (pendingDelete !== current.id) {
-      setPendingDelete(current.id)
+  const deleteRun = async (run: RunMetadata) => {
+    if (deleting) {
       return
     }
-    const runId = current.id
+    if (pendingDelete !== run.id) {
+      setPendingDelete(run.id)
+      return
+    }
+    selectionRequest.current += 1
     setDeleting(true)
     setError('')
     try {
-      await window.inkdrift.deleteRun(runId)
-      const remaining = runs.filter(run => run.id !== runId)
-      setRuns(remaining)
-      const nextBaseline = activeProfileId && prompt.trim()
-        ? await window.inkdrift.getBaseline(activeProfileId, prompt.trim())
+      await window.inkdrift.deleteRun(run.id)
+      const remaining = runs.filter(candidate => candidate.id !== run.id)
+      setRuns(previous => previous.filter(candidate => candidate.id !== run.id))
+      let nextCurrent = current
+      if (current?.id === run.id) {
+        const candidates = historyFilter === 'all'
+          ? remaining
+          : remaining.filter(candidate => candidate.profileId === historyFilter)
+        const next = candidates.find(candidate => candidate.status === 'succeeded')
+          ?? candidates[0]
+        nextCurrent = next ? await window.inkdrift.getRun(next.id) : null
+        setCurrent(nextCurrent)
+      }
+      const baselineProfileId = nextCurrent?.profileId ?? activeProfileId
+      const baselinePrompt = (nextCurrent?.prompt ?? prompt).trim()
+      const nextBaseline = baselineProfileId && baselinePrompt
+        ? await window.inkdrift.getBaseline(baselineProfileId, baselinePrompt)
         : null
-      setBaseline(nextBaseline)
-      const candidates = historyFilter === 'all' ? remaining : remaining.filter(run => run.profileId === historyFilter)
-      const next = candidates.find(run => run.status === 'succeeded') ?? candidates[0]
-      setCurrent(next ? await window.inkdrift.getRun(next.id) : null)
+      setBaselineResult({
+        key: `${baselineProfileId ?? ''}\n${baselinePrompt}`,
+        record: nextBaseline,
+      })
       setPendingDelete(null)
       setNotice('Run deleted from local history.')
     } catch (cause) {
@@ -280,97 +425,121 @@ export function App() {
     }
   }
 
-  useEffect(() => {
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && historyOpen) {
-        closeHistory()
-        return
-      }
-      if (settingsOpen || codeRun || event.defaultPrevented) return
-      if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-        event.preventDefault()
-        void generate()
-        return
-      }
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'b') {
-        event.preventDefault()
-        void setAsBaseline()
-        return
-      }
-      if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
-      if (generating || deleting) return
-      const target = event.target as HTMLElement
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return
-      const index = visibleRuns.findIndex(run => run.id === current?.id)
-      const nextIndex = event.key === 'ArrowUp' ? index + 1 : index - 1
-      if (nextIndex < 0 || nextIndex >= visibleRuns.length) return
-      event.preventDefault()
-      void selectRun(visibleRuns[nextIndex]!.id)
-    }
-    window.addEventListener('keydown', handleKey)
-    return () => window.removeEventListener('keydown', handleKey)
-  }, [closeHistory, codeRun, current, deleting, generate, generating, historyOpen, selectRun, setAsBaseline, settingsOpen, visibleRuns])
-
-  const activeProfile = profiles.find(profile => profile.id === activeProfileId)
+  useKeyboardShortcuts({
+    historyOpen,
+    settingsOpen,
+    codeRun,
+    current,
+    deleting,
+    visibleRuns,
+    closeHistory,
+    generate,
+    setAsBaseline,
+    selectRun,
+  })
 
   return (
     <div className="app-shell">
-      <a className="skip-link" href="#workspace" inert={compactHistory && historyOpen}>Skip to comparison</a>
-      <header className="app-header" inert={compactHistory && historyOpen}>
-        <div className="brand-block">
-          <svg className="brand-mark" viewBox="0 0 36 36" aria-hidden="true"><rect x="1" y="1" width="34" height="34" rx="8" fill="currentColor" /><rect x="8" y="11" width="13" height="16" fill="none" stroke="#f7f7f5" opacity=".42" /><rect x="15" y="7" width="13" height="16" fill="#151515" stroke="#f7f7f5" /><rect x="24" y="25" width="5" height="5" fill="#f7f7f5" /></svg>
-          <div><h1>inkdrift<span className="brand-period">.</span></h1><p><span>A visual canary for language models</span><span className="brand-edition">SVG / 001</span></p></div>
-        </div>
-        <div className="header-actions">
-          <button ref={historyTrigger} className="icon-button history-toggle" type="button" aria-label="Open history" aria-expanded={historyOpen} aria-controls="history-sidebar" onClick={() => setHistoryOpen(true)}><Icon name="history" size={20} /></button>
-          <div className="model-selector"><label htmlFor="active-model">MODEL PROFILE</label><select id="active-model" value={activeProfileId ?? ''} onChange={event => { void selectProfile(event.target.value) }} disabled={generating || deleting || profiles.length === 0}><option value="" disabled>{profiles.length ? 'Select a profile' : 'No profiles yet'}</option>{profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.name} · {profile.modelId}</option>)}</select></div>
-          <button className="icon-button settings-button" type="button" aria-label="Open model settings" disabled={deleting} onClick={() => setSettingsOpen(true)}><Icon name="settings" size={20} /></button>
-          {generating ? <button className="button primary generate-button" type="button" onClick={() => { void window.inkdrift.cancelGeneration() }}><Icon name="cancel" /> Cancel</button> : <button className="button primary generate-button" type="button" title="Generate (Ctrl/Cmd+Enter)" disabled={!activeProfile || !prompt.trim() || deleting} onClick={() => { void generate() }}><Icon name="generate" /> Generate</button>}
-        </div>
-      </header>
-
+      <a
+        className="skip-link"
+        href="#workspace"
+        inert={compactHistory && historyOpen}
+      >
+        Skip to comparison
+      </a>
+      <AppHeader
+        activeRunCount={Object.keys(activeGenerations).length}
+        cancelableGeneration={cancelableGeneration}
+        canGenerate={Boolean(activeProfile && prompt.trim())}
+        deleting={deleting}
+        historyOpen={historyOpen}
+        inert={compactHistory && historyOpen}
+        historyTrigger={historyTrigger}
+        onOpenHistory={() => setHistoryOpen(true)}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onGenerate={() => { void generate() }}
+        onCancel={profileId => {
+          void window.inkdrift.cancelGeneration(profileId)
+        }}
+      />
       <div className="app-body">
-        {compactHistory && historyOpen && <div className="history-backdrop" aria-hidden="true" onClick={closeHistory} />}
-        <aside id="history-sidebar" className={historyOpen ? 'history-sidebar drawer-open' : 'history-sidebar'} aria-labelledby="history-title" inert={compactHistory && !historyOpen} role={compactHistory ? 'dialog' : undefined} aria-modal={compactHistory && historyOpen ? true : undefined}>
-          <div className="sidebar-heading"><div><p className="eyebrow">ARCHIVE</p><h2 id="history-title">History <span>{runs.length.toString().padStart(2, '0')}</span></h2></div><button ref={historyClose} className="icon-button history-close" type="button" aria-label="Close history" onClick={closeHistory}><Icon name="close" size={18} /></button><Icon name="history" size={20} /></div>
-          <search className="history-search"><label htmlFor="history-filter">Filter by model</label><select id="history-filter" value={historyFilter} onChange={event => { setHistoryFilter(event.target.value); setHistoryLimit(50) }}><option value="all">All models</option>{profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select></search>
-          {visibleRuns.length ? <ul className="history-list">{visibleRuns.map(run => <HistoryEntry key={run.id} run={run} selected={current?.id === run.id} onSelect={() => { void selectRun(run.id) }} />)}</ul> : <div className="history-empty"><EmptyArt variant="layers" /><h3>No frames yet</h3><p>Your generated SVGs will collect here, with the model and time attached.</p></div>}
-          {visibleRuns.length < filteredRuns.length && <div className="history-more"><span>Showing {visibleRuns.length} of {filteredRuns.length}</span><button className="button secondary" type="button" onClick={() => setHistoryLimit(limit => limit + 50)}>Load 50 more</button></div>}
-          <footer className="sidebar-footer"><span className="local-dot" />LOCAL ONLY</footer>
-        </aside>
-
-        <main className="workspace" id="workspace" inert={compactHistory && historyOpen}>
-          <section className="prompt-strip" aria-labelledby="prompt-heading">
-            <div className="prompt-number">01</div>
-            <div className="prompt-content"><div className="prompt-heading"><div><h2 id="prompt-heading">The brief</h2><p>One prompt. Two points in time.</p></div><span className="prompt-shortcut" aria-label="Generate with Control or Command plus Enter"><kbd>Ctrl / Cmd</kbd><kbd>Enter</kbd></span></div><label className="visually-hidden" htmlFor="svg-prompt">SVG generation prompt</label><textarea id="svg-prompt" value={prompt} onChange={event => setPrompt(event.target.value)} disabled={generating || deleting} rows={2} maxLength={100000} spellCheck={false} onBlur={() => {
-              if (prompt.trim()) void window.inkdrift.setPrompt(prompt.trim()).catch(() => {})
-            }} /></div>
-            <button className="icon-button prompt-reset" type="button" aria-label="Reset to the Charmander prompt" onClick={() => setPrompt(DEFAULT_PROMPT)} disabled={generating || deleting}><Icon name="refresh" /></button>
-          </section>
-
-          {(error || notice) && <div className={error ? 'app-message error' : 'app-message'} role={error ? 'alert' : 'status'}><span>{error || notice}</span><button type="button" aria-label="Dismiss message" onClick={() => { setError(''); setNotice('') }}><Icon name="close" size={15} /></button></div>}
-
-          <div className="comparison-heading">
-            <div className="comparison-title"><span className="prompt-number">02</span><div><p className="eyebrow">THE COMPARISON</p><h2>Frame by frame.</h2></div></div>
-            <div className="view-controls" aria-label="Comparison zoom controls">
-              <span className="eyebrow">VIEW</span>
-              <button className="icon-button" type="button" aria-label="Zoom out" title="Zoom out" disabled={zoom <= 50} onClick={() => setZoom(value => Math.max(50, value - 25))}>−</button>
-              <output className="zoom-value" aria-label="Zoom level">{zoom}%</output>
-              <button className="icon-button" type="button" aria-label="Zoom in" title="Zoom in" disabled={zoom >= 200} onClick={() => setZoom(value => Math.min(200, value + 25))}>+</button>
-              <button className="button secondary fit-button" type="button" disabled={zoom === 100} onClick={() => setZoom(100)}>Fit</button>
-            </div>
-          </div>
-          <div className="comparison-grid">
-            <RunPanel title="BASELINE" record={baseline} emptyTitle="No baseline for this brief" emptyDescription="Generate an SVG you like, then explicitly save it as your visual reference." onCode={setCodeRun} emptyProfileName={activeProfile?.name} zoom={zoom} />
-            <RunPanel title="CURRENT" record={current} emptyTitle={generating ? 'Drawing a new frame' : activeProfile ? 'Your next SVG lands here' : 'Choose a model to begin'} emptyDescription={generating ? 'Nextloop is running a single turn. Your baseline stays untouched.' : activeProfile ? 'Generate once, compare twice. Nothing is scored automatically.' : 'Open settings to add an OpenAI-compatible model profile.'} onCode={setCodeRun} zoom={zoom} onDelete={deleteRun} deletePending={pendingDelete === current?.id} deleting={deleting} action={current?.status === 'succeeded' && current.profileId === activeProfileId && current.prompt === prompt.trim() && <div className="current-actions">{baseline?.id !== current.id && <button className="button secondary" type="button" title="Set as baseline (Ctrl/Cmd+B)" disabled={deleting} onClick={() => { void setAsBaseline() }}><Icon name="baseline" /> Set as baseline</button>}</div>} />
-          </div>
-          <footer className="workspace-footer"><span>NO JUDGE</span><span>NO SCORE</span><span>JUST THE FRAMES</span></footer>
-        </main>
+        {compactHistory && historyOpen && (
+          <div
+            className="history-backdrop"
+            aria-hidden="true"
+            onClick={closeHistory}
+          />
+        )}
+        <Sidebar
+          profiles={profiles}
+          activeProfileId={activeProfileId}
+          activeGenerations={activeGenerations}
+          runs={runs}
+          visibleRuns={visibleRuns}
+          filteredRunsCount={filteredRuns.length}
+          current={current}
+          historyFilter={historyFilter}
+          historyOpen={historyOpen}
+          compactHistory={compactHistory}
+          pendingDelete={pendingDelete}
+          deleting={deleting}
+          historyClose={historyClose}
+          onSelectProfile={profileId => { void selectProfile(profileId) }}
+          onSelectRun={runId => { void selectRun(runId) }}
+          onDeleteRun={deleteRun}
+          onHistoryFilter={value => {
+            setHistoryFilter(value)
+            setHistoryLimit(50)
+          }}
+          onLoadMore={() => setHistoryLimit(limit => limit + 50)}
+          onCloseHistory={closeHistory}
+        />
+        <Workspace
+          prompt={prompt}
+          deleting={deleting}
+          error={error}
+          notice={notice}
+          zoom={zoom}
+          baseline={baseline}
+          current={current}
+          activeProfile={activeProfile}
+          pendingGeneration={pendingGeneration}
+          pendingDelete={pendingDelete}
+          inert={compactHistory && historyOpen}
+          onPromptChange={setPrompt}
+          onPersistPrompt={() => {
+            if (prompt.trim()) {
+              void window.inkdrift.setPrompt(prompt.trim()).catch(() => {})
+            }
+          }}
+          onDismissMessage={() => {
+            setError('')
+            setNotice('')
+          }}
+          onZoomChange={setZoom}
+          onCode={setCodeRun}
+          onDelete={deleteRun}
+          onSetBaseline={() => { void setAsBaseline() }}
+        />
       </div>
-
-      {loading && <div className="loading-cover"><EmptyArt variant="spark" /><p>Opening the archive…</p></div>}
-      <SettingsDialog open={settingsOpen} profiles={profiles} onClose={() => setSettingsOpen(false)} onSave={saveProfile} onDelete={deleteProfile} />
-      <CodeDialog key={codeRun?.id ?? 'empty'} run={codeRun} onClose={() => setCodeRun(null)} />
+      {loading && (
+        <div className="loading-cover">
+          <EmptyArt variant="spark" />
+          <p>Opening the archive…</p>
+        </div>
+      )}
+      <SettingsDialog
+        open={settingsOpen}
+        profiles={profiles}
+        onClose={() => setSettingsOpen(false)}
+        onSave={saveProfile}
+        onDelete={deleteProfile}
+      />
+      <CodeDialog
+        key={codeRun?.id ?? 'empty'}
+        run={codeRun}
+        onClose={() => setCodeRun(null)}
+      />
     </div>
   )
 }

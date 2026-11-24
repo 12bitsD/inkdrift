@@ -36,8 +36,11 @@ function registerIpc(): void {
   handle('state:get', () => store.getState())
   handle('profile:save', async (_event, input) => store.saveProfile(profileInputSchema.parse(input)))
   handle('profile:delete', async (_event, input) => {
-    if (runner.isRunning) throw new Error('Cancel the current generation before deleting a profile')
-    return store.deleteProfile(runIdSchema.parse(input))
+    const profileId = runIdSchema.parse(input)
+    if (runner.isRunning(profileId)) {
+      throw new Error('Cancel the current generation before deleting this profile')
+    }
+    return store.deleteProfile(profileId)
   })
   handle('profile:activate', (_event, input) => store.setActiveProfile(runIdSchema.parse(input)))
   handle('prompt:set', (_event, input) => store.setPrompt(promptSchema.parse(input)))
@@ -47,8 +50,8 @@ function registerIpc(): void {
     await store.saveRun(record)
     return record
   })
-  handle('generation:cancel', () => {
-    runner.cancel()
+  handle('generation:cancel', (_event, input) => {
+    runner.cancel(runIdSchema.parse(input))
     return Promise.resolve()
   })
   handle('run:get', (_event, input) => store.getRun(runIdSchema.parse(input)))
